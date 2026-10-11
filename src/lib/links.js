@@ -7,6 +7,7 @@
 //             &turn=<base64url JSON iceServers> (TURN servers for networks that block direct calls)
 //             &preview=1 (join straight away with incoming audio muted; used by preview.html)
 import {useEffect, useState} from 'react'
+import {markOwnNavigation} from './guard.js'
 
 export const b64url = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 export const fromB64url = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0))
@@ -26,7 +27,18 @@ export function useHash() {
   return new URLSearchParams(hash.slice(1))
 }
 
-export const go = params => { location.hash = params ? params.toString() : '' }
+const changes = params => `#${params ? params.toString() : ''}` !== (location.hash || '#')
+export const go = params => {
+  if (!changes(params)) return
+  markOwnNavigation()
+  location.hash = params ? params.toString() : ''
+}
+// Same, replacing the current history entry (so Back doesn't return to it, e.g. a call that was left).
+export const goReplace = params => {
+  if (!changes(params)) return
+  markOwnNavigation()
+  location.replace(`${location.pathname}${location.search}#${params ? params.toString() : ''}`)
+}
 
 export function shareLink(url, title = 'Storytime') {
   if (navigator.share) return navigator.share({title, url}).catch(() => {})

@@ -55,6 +55,11 @@ The start screen's "Look at the books" opens any book (or story) in a new tab at
 without a call, with "Download PDF" (one page per book page: the picture and its words; jsPDF is loaded only then).
 `#view=` links can be bookmarked; they use the library key saved on the device.
 
+Back is guarded (`src/lib/guard.js`): on the start screen Back asks "Leave Storytime?" (an extra history entry
+sits on top), and during a call Back asks "Leave the call?"; the Leave button leaves without asking and replaces
+the call in history. Navigate with `go`/`goReplace` from `src/lib/links.js`, never by setting `location.hash`
+directly, so the guard can tell the app's own navigation from Back.
+
 The parent's phone saves those settings in localStorage the first time the home link is opened, so afterwards the
 bare site address is enough (the key is not put back into the address bar). The start screen shows "Who's
 reading?" with a button per reader (the one called last is preselected; **+** adds one). Per reader it saves the

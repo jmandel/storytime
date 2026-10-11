@@ -1,5 +1,6 @@
 // The parent's phone before a call: who's reading, tonight's books, start (or get back to) a call, settings.
-import {useState} from 'react'
+import {useEffect, useState} from 'react'
+import {guardHome} from '../lib/guard.js'
 import {Library} from './Library.jsx'
 import {useLibrary} from '../lib/library.js'
 import {go, linkWith, randomId, shareLink} from '../lib/links.js'
@@ -13,6 +14,7 @@ export function Home() {
   const [browsing, setBrowsing] = useState(false)
   const reader = setup?.current || ''
   const {books, error} = useLibrary(setup?.lk, setup?.lib)
+  useEffect(guardHome, [])
 
   const startCall = () => {
     const p = setupParams(setup)

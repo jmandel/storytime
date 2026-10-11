@@ -6,7 +6,8 @@ import {Library} from './Library.jsx'
 import {SpeakerText} from './SpeakerText.jsx'
 import {useCall, useWakeLock} from '../lib/call.js'
 import {entriesById, openBook as fetchBook, pageLabel, useLibrary} from '../lib/library.js'
-import {go} from '../lib/links.js'
+import {goReplace} from '../lib/links.js'
+import {leaveCallOnPurpose} from '../lib/guard.js'
 import {SETUP, read, rememberBook} from '../lib/store.js'
 
 export function CallRoute({params}) {
@@ -63,7 +64,7 @@ function Call({params, stream}) {
     track.enabled = !track.enabled
     setMuted(!track.enabled)
   }
-  const leave = () => go(read(SETUP) ? '' : (() => {
+  const leave = () => leaveCallOnPurpose() || goReplace(read(SETUP) ? '' : (() => {
     const p = new URLSearchParams(params)
     for (const k of ['r', 'k', 'as', 'b', 'preview']) p.delete(k)
     return p
