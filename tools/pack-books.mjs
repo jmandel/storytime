@@ -1,6 +1,6 @@
 // Encrypt a folder of books for the site.
 // usage: node tools/pack-books.mjs [books dir] [out dir]   (defaults: $STORYTIME_BOOKS and books/)
-// Each <books dir>/<book>/book.json has {id, title, author, tags?, voices?, pages: [{img, text, label?, note?}]}; images sit
+// Each <books dir>/<book>/book.json has {id, title, author, tags?, voices?, public?, pages: [{img, text, label?, note?}]}; images sit
 // beside it. Page text can mark speakers inline: [Frog: "Toad, Toad,"] shouted Frog. voices maps a speaker to a color.
 // The library key comes from STORYTIME_LIBRARY_KEY in the repo's .env (created there on first run if empty).
 // Output: <out dir>/index.bin (book list with small covers) and one <hash>.bin per book, all AES-GCM encrypted.
@@ -37,19 +37,40 @@ async function seal(obj) {
 const dataUrl = file => `data:image/jpeg;base64,${fs.readFileSync(file).toString('base64')}`
 const thumb = (file, size = 320) => `data:image/jpeg;base64,${execFileSync('magick', [file, '-resize', `${size}x${size}>`, '-strip', '-quality', '70', 'jpg:-']).toString('base64')}`
 
-fs.mkdirSync(out, {recursive: true})
-const index = []
+// Books marked "public": true (our own, e.g. ones drawn with Codex) are written unencrypted to <out>/public/
+// (index.json + <id>.json) so anyone can read them without a key; all others are sealed with the library key.
+// Files from earlier runs that no book produces any more are removed.
+const pub = path.join(out, 'public')
+fs.mkdirSync(pub, {recursive: true})
+const index = [], publicIndex = [], written = new Set()
 for (const dir of fs.readdirSync(src).sort()) {
   const bookFile = path.join(src, dir, 'book.json')
   if (!fs.existsSync(bookFile)) continue
   const book = JSON.parse(fs.readFileSync(bookFile, 'utf8'))
   const pages = book.pages.map(p => ({...p, img: dataUrl(path.join(src, dir, p.img)), thumb: thumb(path.join(src, dir, p.img))}))
-  // File names don't reveal titles: HMAC of the book id under the library key.
-  const name = b64url(await subtle.sign('HMAC', hmacKey, new TextEncoder().encode(book.id))).slice(0, 16) + '.bin'
-  fs.writeFileSync(path.join(out, name), await seal({...book, pages}))
-  index.push({id: book.id, file: name, title: book.title, author: book.author, tags: book.tags || [],
-    cover: thumb(path.join(src, dir, book.pages[0].img), 240), pages: pages.length})
-  console.log(`${book.title}: ${pages.length} pages -> ${name}`)
+  const entry = {id: book.id, title: book.title, author: book.author, tags: book.tags || [],
+    cover: thumb(path.join(src, dir, book.pages[0].img), 240), pages: pages.length}
+  if (book.public) {
+    const name = `${book.id}.json`
+    fs.writeFileSync(path.join(pub, name), JSON.stringify({...book, pages}))
+    written.add(path.join(pub, name))
+    publicIndex.push({...entry, file: name, public: true})
+    console.log(`${book.title}: ${pages.length} pages -> public/${name}`)
+  } else {
+    // File names don't reveal titles: HMAC of the book id under the library key.
+    const name = b64url(await subtle.sign('HMAC', hmacKey, new TextEncoder().encode(book.id))).slice(0, 16) + '.bin'
+    fs.writeFileSync(path.join(out, name), await seal({...book, pages}))
+    written.add(path.join(out, name))
+    index.push({...entry, file: name})
+    console.log(`${book.title}: ${pages.length} pages -> ${name}`)
+  }
 }
 fs.writeFileSync(path.join(out, 'index.bin'), await seal({books: index}))
-console.log(`index.bin: ${index.length} books`)
+fs.writeFileSync(path.join(pub, 'index.json'), JSON.stringify({books: publicIndex}))
+for (const [dir, ext] of [[out, '.bin'], [pub, '.json']])
+  for (const f of fs.readdirSync(dir))
+    if (f.endsWith(ext) && !['index.bin', 'index.json'].includes(f) && !written.has(path.join(dir, f))) {
+      fs.rmSync(path.join(dir, f))
+      console.log(`removed stale ${path.relative(out, path.join(dir, f))}`)
+    }
+console.log(`index.bin: ${index.length} private books; public/index.json: ${publicIndex.length} public books`)

@@ -5,7 +5,7 @@ import {useEffect, useLayoutEffect, useRef, useState} from 'react'
 import {Library} from './Library.jsx'
 import {SpeakerText} from './SpeakerText.jsx'
 import {useCall, useWakeLock} from '../lib/call.js'
-import {openSealed, pageLabel, useLibrary} from '../lib/library.js'
+import {openBook as fetchBook, pageLabel, useLibrary} from '../lib/library.js'
 import {go} from '../lib/links.js'
 import {SETUP, read, rememberBook} from '../lib/store.js'
 
@@ -97,7 +97,7 @@ function useChildBooks({params, call, handlers, reader, enabled}) {
   const [remoteState, setRemoteState] = useState(null)
   const [pickerOpen, setPickerOpen] = useState(false)
   const pending = useRef(null)
-  const {books} = useLibrary(enabled && params.get('lk'), params.get('lib'))
+  const {books} = useLibrary(params.get('lk'), params.get('lib'))
   const stack = (params.get('b') || '').split(',').filter(Boolean)
 
   if (!enabled) return {}
@@ -158,7 +158,7 @@ function ReaderBook({params, call, handlers}) {
     setShelfOpen(false)
     setLoading(entry.title)
     try {
-      const b = await openSealed(lk, lib, entry.file)
+      const b = await fetchBook(entry, lk, lib)
       setBook(b)
       setPageNo(Math.max(0, Math.min(b.pages.length - 1, page)))
       rememberBook(b.id)
@@ -205,7 +205,7 @@ function ReaderBook({params, call, handlers}) {
         <div id="bookTitle">{title}</div>
         <button id="shelfBtn" className="ghost" onClick={() => setShelfOpen(true)}>All books</button>
       </div>
-      {(error || listError || !books) && <div id="shelfMsg">{error || (listError ? `Couldn't open the books (${listError}).` : lk ? 'Loading books…' : 'No books in this link.')}</div>}
+      {(error || listError || !books) && <div id="shelfMsg">{error || (listError ? `Couldn't open the books (${listError}).` : 'Loading books…')}</div>}
       {shelfOpen && books && <Library id="shelf" books={books} stack={stack} current={book?.id} onPick={b => { setError(''); openBook(b) }} />}
       {!shelfOpen && book && <Page book={book} pageNo={pageNo} goTo={goTo} />}
     </div>

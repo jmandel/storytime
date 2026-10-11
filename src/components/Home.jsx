@@ -33,21 +33,19 @@ export function Home() {
   return (
     <section id="start" className="screen on center">
       <h1>Storytime</h1>
-      {setup?.lk ? <>
-        <Readers setup={setup} />
+      <>
+        <Readers setup={setup || {}} />
         <p id="startText">Start a call here, then send the link to {reader || 'the reader'}.</p>
         {error && <p className="warn">Couldn't open the books ({error}).</p>}
         <p id="startHint">{picked.length ? `${picked.length} book${picked.length > 1 ? 's' : ''} for tonight` : 'Tap books for tonight (optional)'}</p>
         {books && <Library id="startShelf" books={books} picked={picked}
           onPick={b => setPicked(p => p.includes(b.id) ? p.filter(i => i !== b.id) : [...p, b.id])} />}
         <button id="startBtn" onClick={startCall}>Start a call</button>
-        <LastCall reader={reader} child={setup.child} />
+        <LastCall reader={reader} child={setup?.child} />
+        {!setup?.lk && <p id="keyHint" className="small">Have a Storytime home link? Open it once on this device to add your own books.</p>}
         <button id="settingsBtn" className="ghost small" onClick={() => setSettingsOpen(true)}>Settings</button>
-        {settingsOpen && <Settings setup={setup} onClose={() => setSettingsOpen(false)} />}
-      </> : <>
-        <p id="startText">Open your Storytime home link once on this device to set it up.</p>
-        <div id="startShelf" />
-      </>}
+        {settingsOpen && <Settings setup={setup || {}} onClose={() => setSettingsOpen(false)} />}
+      </>
     </section>
   )
 }

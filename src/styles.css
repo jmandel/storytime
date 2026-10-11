@@ -135,3 +135,4 @@ button.danger { color:var(--warn); }
 .addReader input { font:inherit; font-weight:600; padding:.45em 1em; border-radius:999px; border:2px solid var(--accent);
   background:#3a3752; color:var(--fg); width:9em; }
 #pickerSheet .library { max-width:none; }
+p.small { font-size:.8em; }

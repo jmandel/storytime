@@ -16,7 +16,8 @@ video plus the current page's words in big type. It is a static site (GitHub Pag
 | `index.html` | the page shell |
 | `preview.html` | both sides side by side in one window, for looking at changes |
 | `vendor/trystero-nostr.js` | Trystero 0.25.4 (Nostr strategy) bundled from `vendor-entry.js` |
-| `books/` | the encrypted library: `index.bin` (book list with small covers) and one `<hash>.bin` per book |
+| `books/` | the private library, encrypted: `index.bin` (book list with small covers) and one `<hash>.bin` per book |
+| `books/public/` | public books, unencrypted: `index.json` and one `<id>.json` per book; anyone can read them |
 | `tools/prep-pages.sh` | scan (PDF or photo folder) to `page-NN.jpg` |
 | `tools/pack-books.mjs` | encrypt every book folder into `books/` |
 | `tools/illustrate.sh` | draw an original book's pages with Codex |
@@ -94,6 +95,9 @@ reader's tablet saves only recent books.
 - `tags` (optional) are lowercase words search should find: series, author nickname (`boynton`), mood
   (`bedtime`), season (`halloween`).
 - `voices` (optional) gives speakers fixed colors; others get colors from a default palette.
+- `public` (optional, `true`): pack the book unencrypted into `books/public/` so the app shows it to everyone,
+  with or without a key. Only for books we have the right to publish (our own, like the Codex-illustrated ones);
+  never for scans of published books.
 
 ### Transcribing the words
 
@@ -148,7 +152,7 @@ Work in `$STORYTIME_BOOKS/<book-id>/work/`.
    so delete a page to redraw it; pass page numbers to draw only those).
 6. Check every page: characters on-model, words spelled exactly. Redraw bad ones.
 7. Convert: `magick work/page-NN.png -strip -quality 84 page-NN.jpg`, write `book.json` (same words as
-   `pages.tsv`, without the styling notes), pack.
+   `pages.tsv`, without the styling notes, and `"public": true` if it should be readable by everyone), pack.
 
 Codex CLI notes: put `-i <images>` **after** the prompt (otherwise the prompt is taken as an image name), run with
 `< /dev/null`, and run long batches in the background.
