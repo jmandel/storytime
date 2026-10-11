@@ -29,7 +29,7 @@ video plus the current page's words in big type. It is a static site (GitHub Pag
 
 Everything after `#` stays in the browser; GitHub never sees it.
 
-    #lk=<library key>&reader=Grandma&child=Cleo            the parent's home link (bookmark it)
+    #lk=<library key>&reader=Gramma,Grammie&child=Cleo     the parent's home link (open once per device)
     #r=<room>&k=<call secret>&as=reader|child&lk=...&b=...  a call link (made by "Start a call")
 
 | Setting | Meaning |
@@ -37,7 +37,7 @@ Everything after `#` stays in the browser; GitHub never sees it.
 | `lk` | library key (`STORYTIME_LIBRARY_KEY` from `.env`); opens `books/` |
 | `r`, `k` | room name and call secret, fresh for every call; `k` encrypts the call setup messages |
 | `as` | `reader` (book panel) or `child` (phone on the stand) |
-| `reader`, `child` | names shown in the app; neutral wording when absent |
+| `reader`, `child` | names shown in the app; neutral wording when absent. In a home link `reader` may list several readers (`Gramma,Grammie`); a call link carries only the one being called |
 | `b` | tonight's stack, `id,id,...`; the reader's tablet opens the first |
 | `lib` | another folder or URL to load the encrypted books from |
 | `relay` | `wss://...,wss://...` signaling relays instead of the default Nostr relays in `app.js` |
@@ -46,10 +46,12 @@ Everything after `#` stays in the browser; GitHub never sees it.
 Start screen settings (`lk`, names, `relay`, `turn`, `lib`) are copied into every call link.
 
 The parent's phone saves those settings in localStorage the first time the home link is opened, so afterwards the
-bare site address is enough (the key is not put back into the address bar). It also saves the last call (offered
-as "Back to the call" / "Send link again" for 12 hours) and the last 8 books opened. The start screen's Settings
-panel edits the names and connection settings, shares the home link to set up another device, and "Forget this
-device" clears all of it. Call links themselves are never saved. The reader's tablet saves only recent books.
+bare site address is enough (the key is not put back into the address bar). The start screen shows "Who's
+reading?" with a button per reader (the one called last is preselected; **+** adds one). Per reader it saves the
+last call (offered as "Back to the call" / "Send link again" for 12 hours); it also keeps the last 8 books opened.
+The Settings panel edits the readers (one per line), the child's name and connection settings, shares the home link
+to set up another device, and "Forget this device" clears all of it. Call links themselves are never saved. The
+reader's tablet saves only recent books.
 
 ## Adding a book from a real one
 

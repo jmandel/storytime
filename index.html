@@ -97,7 +97,11 @@
     display:flex; flex-direction:column; gap:.8em; }
   .sheet h2 { margin:0; font-size:1.2em; }
   .sheet label { display:flex; flex-direction:column; gap:.3em; font-size:.85em; color:var(--muted); }
-  .sheet input { font:inherit; font-size:1.1em; padding:.5em .8em; border-radius:10px; border:0; background:#3a3752; color:var(--fg); }
+  #readersRow { display:flex; flex-direction:column; align-items:center; gap:.5em; }
+  .chip { background:rgba(255,255,255,.14); color:var(--fg); padding:.45em 1.1em; font-weight:600; border:2px solid transparent; }
+  .chip.cur { background:var(--accent); color:#222; }
+  .chip.add { background:none; border:2px dashed #fff4; color:var(--muted); }
+  .sheet textarea, .sheet input { font:inherit; font-size:1.1em; padding:.5em .8em; border-radius:10px; border:0; background:#3a3752; color:var(--fg); }
   .sheet summary { color:var(--muted); font-size:.85em; cursor:pointer; }
   .sheet details label { margin-top:.6em; }
   #picker { position:fixed; inset:0; background:#000c; display:none; align-items:center; justify-content:center; z-index:10; padding:16px; }
@@ -144,6 +148,10 @@
 
 <section id="start" class="screen center">
   <h1>Storytime</h1>
+  <div id="readersRow" style="display:none">
+    <p>Who's reading?</p>
+    <div id="readers" class="row"></div>
+  </div>
   <p id="startText"></p>
   <p id="startHint"></p>
   <div id="startShelf" class="library"></div>
@@ -161,7 +169,7 @@
 <div id="settings" class="overlay">
   <div class="sheet">
     <h2>Settings</h2>
-    <label>Reader's name <input id="set_reader" placeholder="Grandma" autocomplete="off"></label>
+    <label>Who reads (one name per line) <textarea id="set_readers" rows="3" placeholder="Gramma&#10;Grammie"></textarea></label>
     <label>Child's name <input id="set_child" placeholder="Cleo" autocomplete="off"></label>
     <details>
       <summary>Connection</summary>

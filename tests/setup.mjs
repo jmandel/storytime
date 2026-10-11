@@ -1,28 +1,45 @@
-// The parent's phone remembers its setup and last call; settings edit names; "Forget this device" clears it.
+// The parent's phone remembers its setup, its readers and the last call per reader; settings edit them;
+// "Forget this device" clears everything.
 import {browser, page, check, URL_, LK} from './lib.mjs'
 const phone = await page(390, 844, true)
-phone.on('dialog', d => d.accept())
-await phone.goto(`${URL_}#lk=${LK}&reader=Grandma&child=Cleo`)
+let promptAnswer = ''
+phone.on('dialog', d => d.type() === 'prompt' ? d.accept(promptAnswer) : d.accept())
+const startText = () => phone.textContent('#startText')
+const chips = () => phone.locator('#readers .chip:not(.add)').allTextContents()
+const fresh = async () => { await phone.goto(URL_); await phone.reload(); await phone.waitForSelector('#startShelf button', {timeout: 10000}).catch(() => {}) }
+
+await phone.goto(`${URL_}#lk=${LK}&reader=Gramma,Grammie&child=Cleo`)
 await phone.waitForSelector('#startShelf button')
-await phone.goto(URL_); await phone.reload()
-await phone.waitForSelector('#startShelf button', {timeout: 10000}).catch(() => {})
+await fresh()
 check(await phone.locator('#startShelf button').count() > 0, 'bare address shows the books after the home link was opened once')
-check((await phone.textContent('#startText')).includes('Grandma'), `names remembered: "${await phone.textContent('#startText')}"`)
 check(!(await phone.evaluate(() => location.hash)).includes('lk='), 'key is not put back into the address bar')
+check(JSON.stringify(await chips()) === '["Gramma","Grammie"]', `readers from the home link: ${await chips()}`)
+check((await startText()).includes('Gramma.'), `first reader preselected: "${await startText()}"`)
+
+await phone.locator('#readers .chip', {hasText: 'Grammie'}).click(); await phone.waitForSelector('#startShelf button')
+check((await startText()).includes('Grammie'), `picking a reader: "${await startText()}"`)
 await phone.click('#startBtn')
-const readerLink = await phone.textContent('#linkbox')
-check(readerLink.includes(`lk=${LK}`) && readerLink.includes('reader=Grandma'), 'call link carries the saved setup')
+const link = new URLSearchParams((await phone.textContent('#linkbox')).split('#')[1])
+check(link.get('lk') === LK && link.get('reader') === 'Grammie' && link.get('child') === 'Cleo', 'call link carries the key and only the chosen reader')
 await phone.click('#goBtn'); await phone.waitForSelector('#joinBtn'); await phone.click('#joinBtn')
 await phone.click('#leaveBtn'); await phone.waitForSelector('#startBtn')
+check((await startText()).includes('Grammie'), 'after leaving, the same reader is still selected')
 check(await phone.isVisible('#lastBackBtn'), `last call offered: ${await phone.textContent('#lastCallText')}`)
+await phone.locator('#readers .chip', {hasText: 'Gramma'}).first().click(); await phone.waitForSelector('#startBtn')
+check(!(await phone.isVisible('#lastBackBtn')), 'last call is per reader (none for Gramma yet)')
+await phone.locator('#readers .chip', {hasText: 'Grammie'}).click(); await phone.waitForSelector('#lastBackBtn')
 await phone.click('#lastBackBtn'); await phone.waitForSelector('#joinBtn')
-check((await phone.evaluate(() => location.hash)).includes('as=child'), 'back to the call opens the same call')
-await phone.goto(URL_); await phone.reload(); await phone.waitForSelector('#settingsBtn')
-await phone.click('#settingsBtn'); await phone.fill('#set_reader', 'Nana'); await phone.click('#settingsSave')
+check((await phone.evaluate(() => location.hash)).includes('reader=Grammie'), "back to the call opens Grammie's call")
+
+await fresh()
+promptAnswer = 'Nana'
+await phone.click('#readers .chip.add'); await phone.waitForSelector('#startShelf button')
+check(JSON.stringify(await chips()) === '["Gramma","Grammie","Nana"]' && (await startText()).includes('Nana'), `adding a reader: ${await chips()}`)
+await phone.click('#settingsBtn'); await phone.fill('#set_readers', 'Gramma\nNana'); await phone.click('#settingsSave')
 await phone.waitForSelector('#startShelf button')
-check((await phone.textContent('#startText')).includes('Nana'), `settings change the name: "${await phone.textContent('#startText')}"`)
+check(JSON.stringify(await chips()) === '["Gramma","Nana"]', `settings edit the readers: ${await chips()}`)
 await phone.click('#settingsBtn'); await phone.click('#settingsForget')
 await phone.waitForTimeout(1000)
-check(await phone.locator('#startShelf button').count() === 0 && (await phone.textContent('#startText')).includes('home link'),
-  `forget clears the setup: "${await phone.textContent('#startText')}"`)
+check(await phone.locator('#startShelf button').count() === 0 && (await startText()).includes('home link'),
+  `forget clears the setup: "${await startText()}"`)
 await browser.close()

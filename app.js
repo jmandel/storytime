@@ -27,10 +27,26 @@ const SETUP_KEYS = ['lk', 'reader', 'child', 'relay', 'turn', 'lib']
 const SETUP_STORE = 'storytime-setup', LAST_CALL_STORE = 'storytime-last-call'
 const load = key => { try { return JSON.parse(localStorage.getItem(key)) } catch { return null } }
 const save = (key, value) => { try { value == null ? localStorage.removeItem(key) : localStorage.setItem(key, JSON.stringify(value)) } catch {} }
+// Several readers (Gramma, Grammie, ...) can share one phone: the setup keeps a list and which one was called last.
+// A home link may list them: reader=Gramma,Grammie.
 if (!params.get('r')) {
   const given = SETUP_KEYS.filter(k => params.has(k))
-  if (given.length) save(SETUP_STORE, Object.fromEntries(given.map(k => [k, params.get(k)])))
-  else for (const [k, v] of Object.entries(load(SETUP_STORE) || {})) params.set(k, v)
+  let setup = load(SETUP_STORE) || {}
+  if (setup.reader && !setup.readers) { setup.readers = [setup.reader]; setup.current = setup.reader; delete setup.reader }
+  if (given.length) {
+    setup = Object.fromEntries(given.filter(k => k !== 'reader').map(k => [k, params.get(k)]))
+    setup.readers = (params.get('reader') || '').split(',').map(n => n.trim()).filter(Boolean)
+    setup.current = setup.readers[0] || ''
+    save(SETUP_STORE, setup)
+  }
+  for (const k of SETUP_KEYS) params.delete(k)
+  for (const [k, v] of Object.entries(setup)) if (SETUP_KEYS.includes(k)) params.set(k, v)
+  if (setup.current) params.set('reader', setup.current)
+}
+function updateSetup(change) {
+  const setup = load(SETUP_STORE) || {}
+  change(setup)
+  save(SETUP_STORE, setup)
 }
 const isReader = params.get('as') === 'reader'
 const readerName = params.get('reader'), childName = params.get('child')
@@ -73,7 +89,7 @@ $('startBtn').onclick = () => {
     $('copyBtn').textContent = 'Copied'
   }
   const childLink = linkFor('child', p)
-  save(LAST_CALL_STORE, {child: childLink, reader: readerLink, at: Date.now()})
+  save(LAST_CALL_STORE, {...load(LAST_CALL_STORE), [readerName || '']: {child: childLink, reader: readerLink, at: Date.now()}})
   $('goBtn').onclick = () => { location.hash = new URL(childLink).hash; location.reload() }
   show('invite')
 }
@@ -83,35 +99,70 @@ function shareLink(url) {
   navigator.clipboard.writeText(url).then(() => alert('Link copied'))
 }
 
+// "Who's reading?": one button per reader, the current one highlighted; + adds a reader.
+function drawReaders() {
+  const setup = load(SETUP_STORE)
+  if (!setup?.lk) return
+  const readers = setup.readers || []
+  const pick = name => { updateSetup(s => { s.current = name }); location.hash = ''; location.reload() }
+  const buttons = readers.map(name => {
+    const b = document.createElement('button')
+    b.className = 'chip' + (name === readerName ? ' cur' : '')
+    b.textContent = name
+    b.onclick = () => pick(name)
+    return b
+  })
+  const add = document.createElement('button')
+  add.className = 'chip add'
+  add.textContent = readers.length ? '+' : '+ Add who reads'
+  add.setAttribute('aria-label', 'Add a reader')
+  add.onclick = () => {
+    const name = prompt("Reader's name (e.g. Gramma)")?.trim()
+    if (!name) return
+    updateSetup(s => { s.readers = [...new Set([...(s.readers || []), name])]; s.current = name })
+    location.hash = ''
+    location.reload()
+  }
+  $('readers').replaceChildren(...buttons, add)
+  $('readersRow').style.display = ''
+}
+
 // Start screen extras: get back into the last call (left by accident, or the text didn't arrive), and settings.
 function setupStartExtras() {
-  const last = load(LAST_CALL_STORE)
-  const ago = last && (Date.now() - last.at) / 60000
+  drawReaders()
+  const last = (load(LAST_CALL_STORE) || {})[readerName || '']
+  const ago = last?.at && (Date.now() - last.at) / 60000
   if (last && ago < 12 * 60) {
     $('lastCall').style.display = ''
-    $('lastCallText').textContent = `Last call: ${ago < 1 ? 'just now' : ago < 60 ? `${Math.round(ago)} min ago` : `${Math.round(ago / 60)} h ago`}`
+    $('lastCallText').textContent = `Last call${readerName ? ` with ${readerName}` : ''}: ${ago < 1 ? 'just now' : ago < 60 ? `${Math.round(ago)} min ago` : `${Math.round(ago / 60)} h ago`}`
     $('lastBackBtn').onclick = () => { location.hash = new URL(last.child).hash; location.reload() }
     $('lastSendBtn').onclick = () => shareLink(last.reader)
   }
   $('settingsBtn').onclick = () => {
     const saved = load(SETUP_STORE) || {}
-    for (const k of ['reader', 'child', 'relay', 'turn']) $(`set_${k}`).value = saved[k] || ''
+    for (const k of ['child', 'relay', 'turn']) $(`set_${k}`).value = saved[k] || ''
+    $('set_readers').value = (saved.readers || []).join('\n')
     $('settings').classList.add('on')
   }
   $('settingsClose').onclick = () => $('settings').classList.remove('on')
   $('settingsSave').onclick = () => {
     const saved = load(SETUP_STORE) || {}
-    for (const k of ['reader', 'child', 'relay', 'turn']) {
+    for (const k of ['child', 'relay', 'turn']) {
       const v = $(`set_${k}`).value.trim()
       if (v) saved[k] = v; else delete saved[k]
     }
+    saved.readers = [...new Set($('set_readers').value.split('\n').map(n => n.trim()).filter(Boolean))]
+    if (!saved.readers.includes(saved.current)) saved.current = saved.readers[0] || ''
     save(SETUP_STORE, saved)
     location.hash = ''
     location.reload()
   }
   $('settingsHome').onclick = () => {
     const saved = load(SETUP_STORE) || {}
-    shareLink(`${location.origin}${location.pathname}#${new URLSearchParams(saved)}`)
+    const p = new URLSearchParams()
+    for (const k of SETUP_KEYS) if (saved[k]) p.set(k, saved[k])
+    if (saved.readers?.length) p.set('reader', saved.readers.join(','))
+    shareLink(`${location.origin}${location.pathname}#${p}`)
   }
   $('settingsForget').onclick = () => {
     if (!confirm('Forget the books key, names and last call on this device?')) return
