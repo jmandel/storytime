@@ -12,7 +12,8 @@
   iframe { border:10px solid #333; border-radius:18px; background:#000; display:block; }
   #tablet { width:1024px; height:720px; }
   #phone { width:390px; height:720px; }
-  .box { transform-origin:top left; overflow:hidden; }
+  .box { overflow:hidden; }
+  .box iframe { transform-origin:top left; }
 </style>
 </head>
 <body>
@@ -28,14 +29,17 @@
   const src = role => { const q = new URLSearchParams(p); q.set('as', role); return `index.html#${q}` }
   document.getElementById('tablet').src = src('grandma')
   document.getElementById('phone').src = src('kid')
-  // Shrink both frames to fit narrow windows.
+  // Scale the frames to fit: side by side on wide screens, stacked (each filling the width) on narrow ones.
   const fit = () => {
-    const total = 1024 + 390 + 24 + 32 + 40
-    const s = Math.min(1, window.innerWidth / total)
-    document.querySelectorAll('.box').forEach(b => {
-      b.style.transform = `scale(${s})`
-      b.style.width = `${b.firstElementChild.offsetWidth * s}px`
-      b.style.height = `${b.firstElementChild.offsetHeight * s}px`
+    const W = innerWidth - 32, frames = [...document.querySelectorAll('.box iframe')]
+    const outer = f => f.offsetWidth  // includes the 10px border
+    const sideBySide = W >= 900
+    const common = Math.min(1, (W - 24) / frames.reduce((a, f) => a + outer(f), 0))
+    frames.forEach(f => {
+      const s = sideBySide ? common : Math.min(1, W / outer(f))
+      f.style.transform = `scale(${s})`
+      f.parentElement.style.width = `${outer(f) * s}px`
+      f.parentElement.style.height = `${f.offsetHeight * s}px`
     })
   }
   addEventListener('resize', fit); fit()
