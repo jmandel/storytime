@@ -1,7 +1,6 @@
 // The parent's phone before a call: who's reading, tonight's books, start (or get back to) a call, settings.
 import {useState} from 'react'
 import {Library} from './Library.jsx'
-import {Viewer} from './Viewer.jsx'
 import {useLibrary} from '../lib/library.js'
 import {go, linkWith, randomId, shareLink} from '../lib/links.js'
 import {LAST_CALLS, RECENT, SETUP, homeLinkParams, setupParams, update, useStored, write} from '../lib/store.js'
@@ -12,7 +11,6 @@ export function Home() {
   const [picked, setPicked] = useState([])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [browsing, setBrowsing] = useState(false)
-  const [viewing, setViewing] = useState(null)
   const reader = setup?.current || ''
   const {books, error} = useLibrary(setup?.lk, setup?.lib)
 
@@ -54,12 +52,12 @@ export function Home() {
           <div id="browse" className="overlay on" onClick={e => e.target === e.currentTarget && setBrowsing(false)}>
             <div id="pickerSheet">
               <h2>Look at a book</h2>
-              <Library id="browseShelf" books={books} onPick={e => setViewing(e)} />
+              <p className="small">Each book opens in a new tab, as {reader || 'the reader'} sees it, with a PDF download.</p>
+              <Library id="browseShelf" books={books} onPick={e => window.open(`${location.pathname}#view=${encodeURIComponent(e.id)}`, '_blank')} />
               <button id="browseClose" className="ghost" onClick={() => setBrowsing(false)}>Close</button>
             </div>
           </div>
         )}
-        {viewing && <Viewer entry={viewing} books={books} lk={setup?.lk} lib={setup?.lib} onClose={() => setViewing(null)} />}
         {settingsOpen && <Settings setup={setup || {}} onClose={() => setSettingsOpen(false)} />}
       </>
     </section>

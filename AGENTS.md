@@ -51,8 +51,9 @@ Everything after `#` stays in the browser; GitHub never sees it.
 
 Start screen settings (`lk`, names, `relay`, `turn`, `lib`) are copied into every call link.
 
-The start screen's "Look at the books" opens any book (or story) in a full-screen viewer, with "Download PDF" (one
-page per book page: the picture and its words; jsPDF is loaded only then).
+The start screen's "Look at the books" opens any book (or story) in a new tab at `#view=<id>`: the reader's page view
+without a call, with "Download PDF" (one page per book page: the picture and its words; jsPDF is loaded only then).
+`#view=` links can be bookmarked; they use the library key saved on the device.
 
 The parent's phone saves those settings in localStorage the first time the home link is opened, so afterwards the
 bare site address is enough (the key is not put back into the address bar). The start screen shows "Who's
