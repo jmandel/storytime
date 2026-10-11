@@ -5,7 +5,7 @@ import {browser, page, check, URL_, LK} from './lib.mjs'
 const p = await page(1180, 820)
 await p.goto(`${URL_}#lk=${LK}`)
 await p.waitForSelector('#viewBtn'); await p.click('#viewBtn')
-await p.locator('#browseShelf button', {hasText: "Little Owl"}).click()
+await p.locator('#browseShelf button', {hasText: "Little Owl's Day"}).click()
 await p.waitForSelector('#viewer #pageText')
 check((await p.textContent('#viewer #bookTitle')).includes("Little Owl"), 'viewer opens the book')
 await p.click('#viewer #nextBtn')
