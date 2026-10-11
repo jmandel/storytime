@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1d1b2e">
+<title>Storytime</title>
+<style>
+  :root { --bg:#1d1b2e; --fg:#f5f2ea; --muted:#a9a4bd; --accent:#ffb347; --ok:#7bd88f; --warn:#ff7a7a; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg);
+    font:18px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; overflow:hidden; }
+  button { font:inherit; border:0; border-radius:999px; padding:.8em 1.6em; cursor:pointer;
+    background:var(--accent); color:#222; font-weight:600; }
+  button.ghost { background:rgba(255,255,255,.14); color:var(--fg); }
+  .screen { position:fixed; inset:0; display:none; }
+  .screen.on { display:flex; }
+  .center { flex-direction:column; align-items:center; justify-content:center; gap:1.2em;
+    padding:24px; text-align:center; }
+  h1 { font-size:2.2em; margin:0; }
+  p { margin:0; color:var(--muted); max-width:28em; }
+  #call { background:#000; }
+  #remote { width:100%; height:100%; object-fit:contain; background:#000; }
+  #self { position:absolute; right:12px; bottom:12px; width:22vmin; max-width:200px; border-radius:12px;
+    transform:scaleX(-1); object-fit:cover; aspect-ratio:3/4; background:#222; box-shadow:0 2px 12px #0008; }
+  #status { position:absolute; left:12px; top:calc(12px + env(safe-area-inset-top)); padding:.3em .8em;
+    border-radius:999px; background:#0009; font-size:.8em; }
+  #status.ok { color:var(--ok); } #status.warn { color:var(--warn); }
+  #waiting { position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size:1.4em; color:var(--muted); pointer-events:none; }
+  #bar { position:absolute; left:0; right:0; bottom:calc(12px + env(safe-area-inset-bottom));
+    display:flex; justify-content:center; gap:12px; }
+  #bar button { padding:.6em 1.2em; }
+  #bar button.off { background:var(--warn); color:#222; }
+  #linkbox { word-break:break-all; font-size:.75em; color:var(--muted); max-width:30em; }
+</style>
+</head>
+<body>
+
+<section id="start" class="screen center">
+  <h1>Storytime</h1>
+  <p>Start a call here, then send the link to Grandma.</p>
+  <button id="startBtn">Start a call</button>
+</section>
+
+<section id="invite" class="screen center">
+  <h1>Send this to Grandma</h1>
+  <button id="shareBtn">Share link</button>
+  <button id="copyBtn" class="ghost">Copy link</button>
+  <div id="linkbox"></div>
+  <button id="goBtn" class="ghost">Open the call</button>
+</section>
+
+<section id="join" class="screen center">
+  <h1 id="joinTitle">Storytime</h1>
+  <p id="joinText">Tap to turn on the camera and join.</p>
+  <button id="joinBtn">Join</button>
+  <p id="joinErr" style="color:var(--warn)"></p>
+</section>
+
+<section id="call" class="screen">
+  <video id="remote" autoplay playsinline></video>
+  <div id="waiting"></div>
+  <video id="self" autoplay playsinline muted></video>
+  <div id="status"></div>
+  <div id="bar">
+    <button id="muteBtn" class="ghost">Mute</button>
+    <button id="leaveBtn" class="ghost">Leave</button>
+  </div>
+</section>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
