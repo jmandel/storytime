@@ -20,6 +20,18 @@ const $ = id => document.getElementById(id)
 const show = id => document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id))
 
 const params = new URLSearchParams(location.hash.slice(1))
+
+// The parent's phone remembers its setup (library key, names, relay settings), so after opening the home link once,
+// the bare site address is enough. Call links (r=...) are never saved; "Forget this device" clears everything.
+const SETUP_KEYS = ['lk', 'reader', 'child', 'relay', 'turn', 'lib']
+const SETUP_STORE = 'storytime-setup', LAST_CALL_STORE = 'storytime-last-call'
+const load = key => { try { return JSON.parse(localStorage.getItem(key)) } catch { return null } }
+const save = (key, value) => { try { value == null ? localStorage.removeItem(key) : localStorage.setItem(key, JSON.stringify(value)) } catch {} }
+if (!params.get('r')) {
+  const given = SETUP_KEYS.filter(k => params.has(k))
+  if (given.length) save(SETUP_STORE, Object.fromEntries(given.map(k => [k, params.get(k)])))
+  else for (const [k, v] of Object.entries(load(SETUP_STORE) || {})) params.set(k, v)
+}
 const isReader = params.get('as') === 'reader'
 const readerName = params.get('reader'), childName = params.get('child')
 const reader = readerName || 'the reader', child = childName || 'the child'
@@ -55,13 +67,58 @@ $('startBtn').onclick = () => {
   const readerLink = linkFor('reader', p)
   $('linkbox').textContent = readerLink
   $('shareBtn').style.display = navigator.share ? '' : 'none'
-  $('shareBtn').onclick = () => navigator.share({title: childName ? `Storytime with ${childName}` : 'Storytime', url: readerLink}).catch(() => {})
+  $('shareBtn').onclick = () => shareLink(readerLink)
   $('copyBtn').onclick = async () => {
     await navigator.clipboard.writeText(readerLink)
     $('copyBtn').textContent = 'Copied'
   }
-  $('goBtn').onclick = () => { location.hash = new URL(linkFor('child', p)).hash; location.reload() }
+  const childLink = linkFor('child', p)
+  save(LAST_CALL_STORE, {child: childLink, reader: readerLink, at: Date.now()})
+  $('goBtn').onclick = () => { location.hash = new URL(childLink).hash; location.reload() }
   show('invite')
+}
+
+function shareLink(url) {
+  if (navigator.share) return navigator.share({title: childName ? `Storytime with ${childName}` : 'Storytime', url}).catch(() => {})
+  navigator.clipboard.writeText(url).then(() => alert('Link copied'))
+}
+
+// Start screen extras: get back into the last call (left by accident, or the text didn't arrive), and settings.
+function setupStartExtras() {
+  const last = load(LAST_CALL_STORE)
+  const ago = last && (Date.now() - last.at) / 60000
+  if (last && ago < 12 * 60) {
+    $('lastCall').style.display = ''
+    $('lastCallText').textContent = `Last call: ${ago < 1 ? 'just now' : ago < 60 ? `${Math.round(ago)} min ago` : `${Math.round(ago / 60)} h ago`}`
+    $('lastBackBtn').onclick = () => { location.hash = new URL(last.child).hash; location.reload() }
+    $('lastSendBtn').onclick = () => shareLink(last.reader)
+  }
+  $('settingsBtn').onclick = () => {
+    const saved = load(SETUP_STORE) || {}
+    for (const k of ['reader', 'child', 'relay', 'turn']) $(`set_${k}`).value = saved[k] || ''
+    $('settings').classList.add('on')
+  }
+  $('settingsClose').onclick = () => $('settings').classList.remove('on')
+  $('settingsSave').onclick = () => {
+    const saved = load(SETUP_STORE) || {}
+    for (const k of ['reader', 'child', 'relay', 'turn']) {
+      const v = $(`set_${k}`).value.trim()
+      if (v) saved[k] = v; else delete saved[k]
+    }
+    save(SETUP_STORE, saved)
+    location.hash = ''
+    location.reload()
+  }
+  $('settingsHome').onclick = () => {
+    const saved = load(SETUP_STORE) || {}
+    shareLink(`${location.origin}${location.pathname}#${new URLSearchParams(saved)}`)
+  }
+  $('settingsForget').onclick = () => {
+    if (!confirm('Forget the books key, names and last call on this device?')) return
+    ;[SETUP_STORE, LAST_CALL_STORE, RECENT_KEY].forEach(k => save(k, null))
+    location.hash = ''
+    location.reload()
+  }
 }
 
 let room, selfStream, peerId = null, sendState = () => {}
@@ -461,7 +518,7 @@ $('leaveBtn').onclick = () => {
   selfStream?.getTracks().forEach(t => t.stop())
   const p = new URLSearchParams(params)
   ;['r', 'k', 'as'].forEach(k => p.delete(k))
-  location.hash = p.toString()
+  location.hash = load(SETUP_STORE) ? '' : p.toString()
   location.reload()
 }
 
@@ -476,4 +533,6 @@ if (params.get('r') && params.get('k')) {
   $('inviteTitle').textContent = `Send this to ${reader}`
   show('start')
   setupStartShelf()
+  setupStartExtras()
+  if (!params.get('lk')) $('startText').textContent = 'Open your Storytime home link once on this device to set it up.'
 }

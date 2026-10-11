@@ -45,6 +45,12 @@ Everything after `#` stays in the browser; GitHub never sees it.
 
 Start screen settings (`lk`, names, `relay`, `turn`, `lib`) are copied into every call link.
 
+The parent's phone saves those settings in localStorage the first time the home link is opened, so afterwards the
+bare site address is enough (the key is not put back into the address bar). It also saves the last call (offered
+as "Back to the call" / "Send link again" for 12 hours) and the last 8 books opened. The start screen's Settings
+panel edits the names and connection settings, shares the home link to set up another device, and "Forget this
+device" clears all of it. Call links themselves are never saved. The reader's tablet saves only recent books.
+
 ## Adding a book from a real one
 
 1. **Scan.** Photograph each spread flat from straight above in good light, cover first, back cover last (or use a
@@ -145,8 +151,9 @@ Codex CLI notes: put `-i <images>` **after** the prompt (otherwise the prompt is
 Serve the folder locally and run the tests (Chromium with a fake camera; they use the public Nostr relays):
 
     npm run serve &                             # python3 -m http.server 8092 --bind 127.0.0.1
-    npm test                                    # tests/call.mjs (connect, wrong secret refused) + tests/books.mjs
-                                                # (stack, book switching, page turns both ways)
+    npm test                                    # tests/call.mjs (connect, wrong secret refused), tests/books.mjs
+                                                # (stack, book switching, page turns both ways), tests/setup.mjs
+                                                # (saved setup, last call, settings, forget)
     STORYTIME_LIB=books-test/ node tests/books.mjs   # same with a big test library, if you made one
     node tests/screens.mjs                      # screenshots of every screen at six sizes -> tests/out/
 

@@ -74,9 +74,9 @@
 
   .mini-shelf { display:grid; grid-template-columns:repeat(auto-fill, minmax(6em, 1fr)); gap:.7em; width:100%; max-width:30em; }
   .library { width:100%; max-width:32em; text-align:left; }
-  #start .library { max-height:52vh; overflow:auto; }
+  #start { justify-content:safe center; }
   #start .library input { box-shadow:0 0 0 6px var(--bg); }
-  #start { overflow:auto; }
+  #start { overflow:auto; padding-top:max(24px, env(safe-area-inset-top)); padding-bottom:max(24px, env(safe-area-inset-bottom)); }
   .library h3 { font-size:.8em; color:var(--muted); font-weight:600; margin:.9em 0 .4em; text-transform:uppercase; letter-spacing:.04em; }
   .library h3:empty { display:none; }
   .library input { position:sticky; top:0; z-index:2; box-shadow:0 0 0 6px var(--panel); width:100%; font:inherit; padding:.5em .9em; border-radius:999px; border:0; margin-top:.6em;
@@ -87,6 +87,19 @@
   .pickNum { position:absolute; top:2px; right:2px; background:var(--accent); color:#222; border-radius:999px;
     min-width:1.6em; height:1.6em; line-height:1.6em; font-size:.85em; font-weight:700; }
   .mini-shelf img { width:100%; height:6.5em; object-fit:contain; display:block; margin-bottom:4px; }
+  .row { display:flex; gap:.6em; flex-wrap:wrap; justify-content:center; }
+  #lastCall { display:flex; flex-direction:column; align-items:center; gap:.5em; }
+  button.small { font-size:.8em; padding:.5em 1.2em; }
+  button.danger { color:var(--warn); }
+  .overlay { position:fixed; inset:0; background:#000c; display:none; align-items:center; justify-content:center; z-index:10; padding:16px; }
+  .overlay.on { display:flex; }
+  .sheet { background:var(--panel); border-radius:16px; padding:1.2em; width:100%; max-width:28em; max-height:90vh; overflow:auto;
+    display:flex; flex-direction:column; gap:.8em; }
+  .sheet h2 { margin:0; font-size:1.2em; }
+  .sheet label { display:flex; flex-direction:column; gap:.3em; font-size:.85em; color:var(--muted); }
+  .sheet input { font:inherit; font-size:1.1em; padding:.5em .8em; border-radius:10px; border:0; background:#3a3752; color:var(--fg); }
+  .sheet summary { color:var(--muted); font-size:.85em; cursor:pointer; }
+  .sheet details label { margin-top:.6em; }
   #picker { position:fixed; inset:0; background:#000c; display:none; align-items:center; justify-content:center; z-index:10; padding:16px; }
   #picker.on { display:flex; }
   #pickerSheet { background:var(--panel); border-radius:16px; padding:1em; width:100%; max-width:32em; max-height:90vh; overflow:auto;
@@ -135,7 +148,34 @@
   <p id="startHint"></p>
   <div id="startShelf" class="library"></div>
   <button id="startBtn">Start a call</button>
+  <div id="lastCall" style="display:none">
+    <p id="lastCallText"></p>
+    <div class="row">
+      <button id="lastBackBtn" class="ghost">Back to the call</button>
+      <button id="lastSendBtn" class="ghost">Send link again</button>
+    </div>
+  </div>
+  <button id="settingsBtn" class="ghost small">Settings</button>
 </section>
+
+<div id="settings" class="overlay">
+  <div class="sheet">
+    <h2>Settings</h2>
+    <label>Reader's name <input id="set_reader" placeholder="Grandma" autocomplete="off"></label>
+    <label>Child's name <input id="set_child" placeholder="Cleo" autocomplete="off"></label>
+    <details>
+      <summary>Connection</summary>
+      <label>Signaling relays <input id="set_relay" placeholder="wss://relay.example,wss://other.example" autocomplete="off"></label>
+      <label>TURN servers (base64url JSON) <input id="set_turn" autocomplete="off"></label>
+    </details>
+    <div class="row">
+      <button id="settingsSave">Save</button>
+      <button id="settingsClose" class="ghost">Cancel</button>
+    </div>
+    <button id="settingsHome" class="ghost small">Share home link (set up another device)</button>
+    <button id="settingsForget" class="ghost small danger">Forget this device</button>
+  </div>
+</div>
 
 <section id="invite" class="screen center">
   <h1 id="inviteTitle"></h1>
