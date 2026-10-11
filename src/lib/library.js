@@ -9,7 +9,7 @@ const indexes = new Map()
 
 export async function openSealed(lk, lib, file) {
   if (!keys.has(lk)) keys.set(lk, crypto.subtle.importKey('raw', fromB64url(lk), 'AES-GCM', false, ['decrypt']))
-  const res = await fetch(libUrl(lib, file))
+  const res = await fetch(libUrl(lib, file), {cache: 'no-cache'})  // revalidate: Pages lets browsers reuse files for 10 min
   if (!res.ok) throw new Error(`${file}: ${res.status}`)
   const buf = new Uint8Array(await res.arrayBuffer())
   const plain = await crypto.subtle.decrypt({name: 'AES-GCM', iv: buf.slice(0, 12)}, await keys.get(lk), buf.slice(12))
@@ -19,7 +19,7 @@ export async function openSealed(lk, lib, file) {
 const libUrl = (lib, file) => new URL(file, new URL(lib || 'books/', location.href))
 
 async function loadPublic(lib, file) {
-  const res = await fetch(libUrl(lib, `public/${file}`))
+  const res = await fetch(libUrl(lib, `public/${file}`), {cache: 'no-cache'})
   if (!res.ok) throw new Error(`public/${file}: ${res.status}`)
   return res.json()
 }
