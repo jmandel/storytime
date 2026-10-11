@@ -1,7 +1,8 @@
 import {joinRoom} from './vendor/trystero-nostr.js'
 
 // Link format (everything lives after '#', so it never reaches the web server):
-//   #r=<room>&k=<secret>&as=grandma|kid&lk=<library key>
+//   #r=<room>&k=<secret>&as=reader|child&lk=<library key>
+//   optional: &reader=<name>&child=<name> (shown in the app, e.g. reader=Grandma&child=Cleo)
 //   optional: &b=<book id> (the book to open first)
 //             &lib=<url of the encrypted books folder> (default: books/ next to this page)
 //             &relay=wss://a,wss://b (our own signaling relays instead of the defaults)
@@ -19,9 +20,12 @@ const $ = id => document.getElementById(id)
 const show = id => document.querySelectorAll('.screen').forEach(s => s.classList.toggle('on', s.id === id))
 
 const params = new URLSearchParams(location.hash.slice(1))
-const isGrandma = params.get('as') === 'grandma'
+const isReader = params.get('as') === 'reader'
+const readerName = params.get('reader'), childName = params.get('child')
+const reader = readerName || 'the reader', child = childName || 'the child'
+const cap = t => t[0].toUpperCase() + t.slice(1)
 const preview = params.get('preview') === '1'
-document.body.classList.toggle('grandma', isGrandma)
+document.body.classList.toggle('reader', isReader)
 
 const b64url = bytes => btoa(String.fromCharCode(...bytes)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
 const fromB64url = s => Uint8Array.from(atob(s.replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0))
@@ -48,15 +52,15 @@ $('startBtn').onclick = () => {
   p.set('r', randomId(12))
   p.set('k', randomId(18))
   if (startPick) p.set('b', startPick); else p.delete('b')
-  const grandma = linkFor('grandma', p)
-  $('linkbox').textContent = grandma
+  const readerLink = linkFor('reader', p)
+  $('linkbox').textContent = readerLink
   $('shareBtn').style.display = navigator.share ? '' : 'none'
-  $('shareBtn').onclick = () => navigator.share({title: 'Storytime with Cleo', url: grandma}).catch(() => {})
+  $('shareBtn').onclick = () => navigator.share({title: childName ? `Storytime with ${childName}` : 'Storytime', url: readerLink}).catch(() => {})
   $('copyBtn').onclick = async () => {
-    await navigator.clipboard.writeText(grandma)
+    await navigator.clipboard.writeText(readerLink)
     $('copyBtn').textContent = 'Copied'
   }
-  $('goBtn').onclick = () => { location.hash = new URL(linkFor('kid', p)).hash; location.reload() }
+  $('goBtn').onclick = () => { location.hash = new URL(linkFor('child', p)).hash; location.reload() }
   show('invite')
 }
 
@@ -78,8 +82,8 @@ async function join() {
   show('call')
   waiting(true)
   keepAwake()
-  if (isGrandma) loadShelf()
-  else if (params.get('lk')) setupKidBooks()
+  if (isReader) loadShelf()
+  else if (params.get('lk')) setupChildBooks()
 
   room = joinRoom(config(), params.get('r'), {
     onJoinError: d => status(`Can't join: ${d.error || 'wrong link?'}`, 'warn'),
@@ -87,12 +91,12 @@ async function join() {
   const action = room.makeAction('book')
   sendState = (data, target) => action.send(data, target ? {target} : undefined)
   action.onMessage = msg => {
-    if (isGrandma && msg?.want) return follow(msg.want)
-    if (!isGrandma) showRemoteState(msg)
+    if (isReader && msg?.want) return follow(msg.want)
+    if (!isReader) showRemoteState(msg)
   }
   room.onPeerJoin = id => {
     room.addStream(selfStream, {target: id})
-    sendState(isGrandma ? currentPage() : pendingWant && {want: pendingWant}, id)
+    sendState(isReader ? currentPage() : pendingWant && {want: pendingWant}, id)
     pendingWant = null
     status('Connecting…')
   }
@@ -110,7 +114,7 @@ async function join() {
   }
 }
 
-const other = () => isGrandma ? 'Cleo' : 'Grandma'
+const other = () => isReader ? child : reader
 
 function waiting(on) {
   $('waiting').textContent = on ? `Waiting for ${other()}…` : ''
@@ -229,6 +233,7 @@ function goTo(i) {
   $('pageNote').textContent = p.note || ''
   $('pageText').textContent = p.text
   $('pageText').scrollTop = 0
+  fitText()
   $('pageNum').textContent = pageLabel(pageNo)
   $('prevBtn').disabled = pageNo === 0
   $('nextBtn').disabled = pageNo === book.pages.length - 1
@@ -237,14 +242,14 @@ function goTo(i) {
   sendState(currentPage())
 }
 
-// Grandma's tablet: apply a book/page change asked for from the phone.
+// The reader's tablet: apply a book/page change asked for from the phone.
 function follow(want) {
   if (book && want.id === book.id) return goTo(want.page ?? pageNo)
   const entry = shelfBooks.find(b => b.id === want.id)
   if (entry) openBook(entry, want.page ?? 0)
 }
 
-// The phone: pick books before and during the call, nudge pages, and show what Grandma's tablet has open.
+// The phone: pick books before and during the call, nudge pages, and show what the reader's tablet has open.
 let startPick = null, pendingWant = null, remoteState = null
 
 function renderShelf(el, books, current, onPick) {
@@ -270,7 +275,7 @@ async function setupStartShelf() {
   } catch {}
 }
 
-async function setupKidBooks() {
+async function setupChildBooks() {
   let books
   try { ({books} = await openSealed('index.bin')) } catch { return }
   $('bookBtn').style.display = ''
@@ -282,21 +287,45 @@ async function setupKidBooks() {
     $('picker').classList.add('on')
   }
   $('pickerClose').onclick = () => $('picker').classList.remove('on')
-  $('kidPrev').onclick = () => remoteState && want({id: remoteState.id, page: remoteState.page - 1})
-  $('kidNext').onclick = () => remoteState && want({id: remoteState.id, page: remoteState.page + 1})
+  $('childPrev').onclick = () => remoteState && want({id: remoteState.id, page: remoteState.page - 1})
+  $('childNext').onclick = () => remoteState && want({id: remoteState.id, page: remoteState.page + 1})
 }
 
 function want(w) {
   if (peerId) sendState({want: w})
-  else pendingWant = w  // sent when Grandma joins
+  else pendingWant = w  // sent when the reader joins
 }
 
 function showRemoteState(p) {
   remoteState = p
   $('pageBadge').style.display = p ? 'block' : 'none'
-  $('kidNav').style.display = p ? 'flex' : 'none'
-  if (p) $('pageBadge').textContent = `Grandma: ${p.title}, ${p.label}`
+  $('childNav').style.display = p ? 'flex' : 'none'
+  if (p) $('pageBadge').textContent = `${cap(reader)}: ${p.title}, ${p.label}`
 }
+
+// Largest type (up to 64px) at which the whole page's words fit their box, whatever the screen.
+// If the words would end up small, hide the page picture (the real book is on the video anyway) and fit again.
+function fitText() {
+  $('reader').classList.remove('noimg')
+  if (fitSize() < 26 && $('pageImg').offsetHeight) {
+    $('reader').classList.add('noimg')
+    fitSize()
+  }
+}
+function fitSize() {
+  const el = $('pageText')
+  if (!el.clientHeight) return 99
+  let lo = 16, hi = 64
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1
+    el.style.fontSize = `${mid}px`
+    if (el.scrollHeight <= el.clientHeight && el.scrollWidth <= el.clientWidth) lo = mid
+    else hi = mid
+  }
+  el.style.fontSize = `${lo}px`
+  return lo
+}
+addEventListener('resize', () => fitText())
 
 $('prevBtn').onclick = () => goTo(pageNo - 1)
 $('nextBtn').onclick = () => goTo(pageNo + 1)
@@ -323,11 +352,14 @@ $('leaveBtn').onclick = () => {
 }
 
 if (params.get('r') && params.get('k')) {
-  $('joinTitle').textContent = isGrandma ? 'Storytime with Cleo' : 'Storytime with Grandma'
+  const with_ = isReader ? childName : readerName
+  $('joinTitle').textContent = with_ ? `Storytime with ${with_}` : 'Storytime'
   $('joinBtn').onclick = join
   show('join')
   if (preview) join()
 } else {
+  $('startText').textContent = `Start a call here, then send the link to ${reader}.`
+  $('inviteTitle').textContent = `Send this to ${reader}`
   show('start')
   setupStartShelf()
 }

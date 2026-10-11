@@ -18,8 +18,8 @@
 </head>
 <body>
 <main>
-  <figure><figcaption>Grandma's tablet</figcaption><div class="box"><iframe id="tablet" allow="camera; microphone; autoplay; clipboard-write"></iframe></div></figure>
-  <figure><figcaption>Cleo's phone on the stand</figcaption><div class="box"><iframe id="phone" allow="camera; microphone; autoplay; clipboard-write"></iframe></div></figure>
+  <figure><figcaption>Reader's tablet</figcaption><div class="box"><iframe id="tablet" allow="camera; microphone; autoplay; clipboard-write"></iframe></div></figure>
+  <figure><figcaption>Child's phone on the stand</figcaption><div class="box"><iframe id="phone" allow="camera; microphone; autoplay; clipboard-write"></iframe></div></figure>
 </main>
 <script>
   // Both views join a fresh room; this page's own #lk=... (and any other settings) are passed through.
@@ -27,8 +27,11 @@
   const rand = n => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(n)))).replace(/[+/=]/g, '')
   p.set('r', rand(12)); p.set('k', rand(18)); p.set('preview', '1')
   const src = role => { const q = new URLSearchParams(p); q.set('as', role); return `index.html#${q}` }
-  document.getElementById('tablet').src = src('grandma')
-  document.getElementById('phone').src = src('kid')
+  const name = (k, d) => p.get(k) ? `${p.get(k)}'s` : d
+  document.querySelectorAll('figcaption')[0].textContent = `${name('reader', "Reader's")} tablet`
+  document.querySelectorAll('figcaption')[1].textContent = `${name('child', "Child's")} phone on the stand`
+  document.getElementById('tablet').src = src('reader')
+  document.getElementById('phone').src = src('child')
   // Scale the frames to fit: side by side on wide screens, stacked (each filling the width) on narrow ones.
   const fit = () => {
     const W = innerWidth - 32, frames = [...document.querySelectorAll('.box iframe')]
