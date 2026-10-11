@@ -67,8 +67,22 @@ reader's tablet saves only recent books.
 1. **Scan.** Photograph each spread flat from straight above in good light, cover first, back cover last (or use a
    phone "scan to PDF"). One image per spread, in reading order.
 2. **Make page images:** `tools/prep-pages.sh <scan.pdf | photo folder> $STORYTIME_BOOKS/<book-id>`
-   (`<book-id>` is short kebab-case, e.g. `frog-and-toad-are-friends`). Look at every page: right order, upright,
-   nothing cut off.
+   (`<book-id>` is short kebab-case, e.g. `frog-and-toad-are-friends`). Then look at every page image yourself and
+   fix the scan; this is part of the job, not something to report back:
+   - **Rotation.** A photo taken sideways or upside down: `magick page-NN.jpg -rotate 90 page-NN.jpg` (or `-90`,
+     `180`), then look again to confirm it is upright (judge by the characters and the text, not the frame). Don't
+     rotate a page the book itself prints upside down or sideways as a game; keep it as printed and add a `note`
+     ("Printed upside down: turn the book over!").
+   - **Order.** Pages out of order (scanned in the wrong sequence, the back cover first, a page missed and added at
+     the end): rename the files so `page-00` ... `page-NN` follow the book (story text, printed page numbers and
+     the art make the order clear). Rename through temporary names so nothing is overwritten.
+   - **Duplicates and overlaps.** Delete a page photographed twice. When a photo also catches part of the
+     neighbouring page (the previous page's words at the edge), keep it but transcribe only that page's own words.
+   - **Splits.** If the scan has a spread as two photos, or one page per photo, either is fine; keep what was
+     scanned, one entry per image.
+   - **Missing or unreadable.** If a page is missing, blurry, glared over or cut off so the words can't be read,
+     say which one and ask for a re-shoot rather than guessing. A missing cover or back cover is fine.
+   Tell the parent briefly what you fixed (e.g. "page 4 was sideways; I turned it").
 3. **Write `book.json`** in that folder. Read every page image yourself and type the words exactly as printed.
 4. **Pack:** `npm run pack` (encrypts every book folder in `$STORYTIME_BOOKS` into `books/`)
 5. **Check** it in the app (see Testing), then commit `books/` (see Deploying).
