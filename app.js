@@ -85,8 +85,19 @@ async function join() {
   if (isReader) loadShelf()
   else if (params.get('lk')) setupChildBooks()
 
+  connect()
+}
+
+// Join the room. Connection attempts sometimes fail (a slow relay, a network hiccup), so a failed attempt, or a
+// peer whose video hasn't arrived 15 s after it was found, makes us leave and rejoin. Only a wrong call secret,
+// which retrying can't fix, is shown as an error.
+let retryTimer, watchdog
+function connect() {
   room = joinRoom(config(), params.get('r'), {
-    onJoinError: d => status(`Can't join: ${d.error || 'wrong link?'}`, 'warn'),
+    onJoinError: d => {
+      if (/password/i.test(d.error || '')) return status("Can't join: this link doesn't match the call", 'warn')
+      reconnect()
+    },
   })
   const action = room.makeAction('book')
   sendState = (data, target) => action.send(data, target ? {target} : undefined)
@@ -99,8 +110,11 @@ async function join() {
     sendState(isReader ? currentPage() : pendingWant && {want: pendingWant}, id)
     pendingWant = null
     status('Connecting…')
+    clearTimeout(watchdog)
+    watchdog = setTimeout(() => { if (!peerId) reconnect() }, 15000)
   }
   room.onPeerStream = (stream, id) => {
+    clearTimeout(watchdog)
     peerId = id
     $('remote').srcObject = stream
     waiting(false)
@@ -112,6 +126,13 @@ async function join() {
     $('remote').srcObject = null
     waiting(true)
   }
+}
+
+function reconnect() {
+  if (retryTimer) return
+  status('Reconnecting…')
+  try { room?.leave() } catch {}
+  retryTimer = setTimeout(() => { retryTimer = null; connect() }, 2000 + Math.random() * 2000)
 }
 
 const other = () => isReader ? child : reader

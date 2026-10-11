@@ -7,7 +7,7 @@
     "serve": "python3 -m http.server 8092 --bind 127.0.0.1",
     "test": "node tests/call.mjs && node tests/books.mjs",
     "screens": "node tests/screens.mjs",
-    "pack": "node tools/pack-books.mjs ~/storytime-books books"
+    "pack": "node tools/pack-books.mjs"
   },
   "keywords": [],
   "author": "",

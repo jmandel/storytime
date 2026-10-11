@@ -1,12 +1,14 @@
 // Shared setup for the browser tests: headless Chromium with a fake camera and microphone.
-// Env: STORYTIME_URL (default http://127.0.0.1:8092/), STORYTIME_LK (library key; default read from
-// ~/storytime-books/.library-key), CHROMIUM (default /usr/bin/chromium).
+// Settings come from the repo's .env: STORYTIME_URL (default http://127.0.0.1:8092/), STORYTIME_LIBRARY_KEY;
+// CHROMIUM (default /usr/bin/chromium) can be set in the environment.
 import fs from 'node:fs'
-import os from 'node:os'
 import {chromium} from 'playwright-core'
 
+const envFile = new URL('../.env', import.meta.url).pathname
+if (fs.existsSync(envFile)) process.loadEnvFile(envFile)
 export const URL_ = process.env.STORYTIME_URL || 'http://127.0.0.1:8092/'
-export const LK = process.env.STORYTIME_LK || fs.readFileSync(`${os.homedir()}/storytime-books/.library-key`, 'utf8').trim()
+export const LK = process.env.STORYTIME_LIBRARY_KEY
+if (!LK) throw new Error('STORYTIME_LIBRARY_KEY missing: copy .env.example to .env')
 export const browser = await chromium.launch({
   executablePath: process.env.CHROMIUM || '/usr/bin/chromium',
   args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', '--autoplay-policy=no-user-gesture-required'],

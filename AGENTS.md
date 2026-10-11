@@ -17,10 +17,13 @@ video plus the current page's words in big type. It is a static site (GitHub Pag
 | `tools/illustrate.sh` | draw an original book's pages with Codex |
 | `tests/` | headless Chromium tests (`call.mjs`, `books.mjs`) and layout screenshots (`screens.mjs`) |
 
-**Outside the repo, never committed:** `~/storytime-books/` holds the book sources: one folder per book with
-`book.json` and its page images, plus `.library-key`, the key everything in `books/` is encrypted with. The sources
-are scans of real books, so they must not be published unencrypted, and the key must never be committed or pasted
-anywhere public.
+**Never committed:**
+- `.env` (gitignored; copy `.env.example`): `STORYTIME_LIBRARY_KEY`, the key everything in `books/` is encrypted
+  with; `STORYTIME_BOOKS`, the folder with the book sources; `STORYTIME_URL`, the local dev server for tests;
+  `STORYTIME_DEV_URL`, the dev server's public HTTPS address for real devices. Tools and tests read it themselves.
+- The book sources folder (`$STORYTIME_BOOKS`, outside the repo): one folder per book with `book.json` and its page
+  images. They are scans of real books, so they must not be published unencrypted. The key must never be committed
+  or pasted anywhere public.
 
 ## Links
 
@@ -31,7 +34,7 @@ Everything after `#` stays in the browser; GitHub never sees it.
 
 | Setting | Meaning |
 |---|---|
-| `lk` | library key (base64url of the 32 bytes in `.library-key`); opens `books/` |
+| `lk` | library key (`STORYTIME_LIBRARY_KEY` from `.env`); opens `books/` |
 | `r`, `k` | room name and call secret, fresh for every call; `k` encrypts the call setup messages |
 | `as` | `reader` (book panel) or `child` (phone on the stand) |
 | `reader`, `child` | names shown in the app; neutral wording when absent |
@@ -46,11 +49,11 @@ Start screen settings (`lk`, names, `relay`, `turn`, `lib`) are copied into ever
 
 1. **Scan.** Photograph each spread flat from straight above in good light, cover first, back cover last (or use a
    phone "scan to PDF"). One image per spread, in reading order.
-2. **Make page images:** `tools/prep-pages.sh <scan.pdf | photo folder> ~/storytime-books/<book-id>`
+2. **Make page images:** `tools/prep-pages.sh <scan.pdf | photo folder> $STORYTIME_BOOKS/<book-id>`
    (`<book-id>` is short kebab-case, e.g. `frog-and-toad-are-friends`). Look at every page: right order, upright,
    nothing cut off.
 3. **Write `book.json`** in that folder. Read every page image yourself and type the words exactly as printed.
-4. **Pack:** `node tools/pack-books.mjs ~/storytime-books books`
+4. **Pack:** `npm run pack` (encrypts every book folder in `$STORYTIME_BOOKS` into `books/`)
 5. **Check** it in the app (see Testing), then commit `books/` (see Deploying).
 
 ### book.json
@@ -116,7 +119,7 @@ match printed page numbers so "Pages 12-13" on the tablet matches the book in th
 
 ## Making an original book with Codex
 
-Work in `~/storytime-books/<book-id>/work/`.
+Work in `$STORYTIME_BOOKS/<book-id>/work/`.
 
 1. Write the story first: about 10-12 spreads, very short lines, lots of repetition and sound words, a calm
    ending. Put the title in `title.txt`.
@@ -128,7 +131,7 @@ Work in `~/storytime-books/<book-id>/work/`.
    `~/.codex/generated_images/<session>/`.
 4. **`pages.tsv`**: `NN<TAB>scene<TAB>words` per page, `00` = cover, words with ` | ` line breaks and styling notes
    in parentheses.
-5. **Draw:** `tools/illustrate.sh ~/storytime-books/<book-id>/work` (four at a time; existing pages are skipped,
+5. **Draw:** `tools/illustrate.sh $STORYTIME_BOOKS/<book-id>/work` (four at a time; existing pages are skipped,
    so delete a page to redraw it; pass page numbers to draw only those).
 6. Check every page: characters on-model, words spelled exactly. Redraw bad ones.
 7. Convert: `magick work/page-NN.png -strip -quality 84 page-NN.jpg`, write `book.json` (same words as
@@ -141,9 +144,9 @@ Codex CLI notes: put `-i <images>` **after** the prompt (otherwise the prompt is
 
 Serve the folder locally and run the tests (Chromium with a fake camera; they use the public Nostr relays):
 
-    python3 -m http.server 8092 --bind 127.0.0.1 &
-    node tests/call.mjs                         # connect + wrong secret refused
-    node tests/books.mjs                        # stack, book switching, page turns both ways
+    npm run serve &                             # python3 -m http.server 8092 --bind 127.0.0.1
+    npm test                                    # tests/call.mjs (connect, wrong secret refused) + tests/books.mjs
+                                                # (stack, book switching, page turns both ways)
     STORYTIME_LIB=books-test/ node tests/books.mjs   # same with a big test library, if you made one
     node tests/screens.mjs                      # screenshots of every screen at six sizes -> tests/out/
 
@@ -152,19 +155,19 @@ devices during development, expose the local server over HTTPS (camera access ne
 Funnel, and open `preview.html#lk=...` or the home link.
 
 `books-test/` is a scratch library for tests (gitignored). Make one by packing a folder of throwaway book folders
-with a copy of `.library-key`: `node tools/pack-books.mjs <folder> books-test`.
+with the same key: `node tools/pack-books.mjs <folder> books-test`.
 
 ## Deploying
 
 The site is plain files, published by GitHub Pages from the default branch. Commit `books/` together with any app
 change that needs it, run the tests, then push. Check before pushing that no book sources, page images,
-`.library-key` or key values are in the commit (`git show --stat`).
+`.env` or key values are in the commit (`git show --stat`; `git grep` for the key).
 
 ## Keys
 
-- **Library key** (`~/storytime-books/.library-key`): created by the first `pack-books.mjs` run. Anyone with a link
-  containing `lk` can read every book that is online. To revoke old links: move the key file aside, repack (a new
-  key is created), commit `books/`, and give the parent a new home link.
+- **Library key** (`STORYTIME_LIBRARY_KEY` in `.env`): created by the first `npm run pack` if empty. Anyone with a
+  link containing `lk` can read every book that is online. To revoke old links: empty the value, repack (a new key is
+  written to `.env`), commit `books/`, and give the parent a new home link.
 - **Call secret** (`k`): new for every call, made in the browser; nothing to manage.
 
 ## Relays and fallbacks

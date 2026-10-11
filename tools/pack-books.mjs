@@ -1,8 +1,8 @@
 // Encrypt a folder of books for the site.
-// usage: node tools/pack-books.mjs <books dir> <out dir>
+// usage: node tools/pack-books.mjs [books dir] [out dir]   (defaults: $STORYTIME_BOOKS and books/)
 // Each <books dir>/<book>/book.json has {id, title, author, tags?, voices?, pages: [{img, text, label?, note?}]}; images sit
 // beside it. Page text can mark speakers inline: [Frog: "Toad, Toad,"] shouted Frog. voices maps a speaker to a color.
-// The library key (32 random bytes, base64url) lives in <books dir>/.library-key and is created on first run.
+// The library key comes from STORYTIME_LIBRARY_KEY in the repo's .env (created there on first run if empty).
 // Output: <out dir>/index.bin (book list with small covers) and one <hash>.bin per book, all AES-GCM encrypted.
 // The app reads them with the key from the link (#lk=...), so the files are safe to publish.
 import fs from 'node:fs'
@@ -10,12 +10,22 @@ import path from 'node:path'
 import {execFileSync} from 'node:child_process'
 const {subtle} = globalThis.crypto
 
-const [src, out] = process.argv.slice(2)
-if (!src || !out) { console.error('usage: node tools/pack-books.mjs <books dir> <out dir>'); process.exit(1) }
+const envFile = new URL('../.env', import.meta.url).pathname
+if (fs.existsSync(envFile)) process.loadEnvFile(envFile)
+const src = process.argv[2] || process.env.STORYTIME_BOOKS
+const out = process.argv[3] || new URL('../books', import.meta.url).pathname
+if (!src) { console.error('usage: node tools/pack-books.mjs [books dir] [out dir]  (or set STORYTIME_BOOKS in .env)'); process.exit(1) }
 const b64url = buf => Buffer.from(buf).toString('base64url')
-const keyFile = path.join(src, '.library-key')
-if (!fs.existsSync(keyFile)) fs.writeFileSync(keyFile, b64url(crypto.getRandomValues(new Uint8Array(32))) + '\n', {mode: 0o600})
-const rawKey = Buffer.from(fs.readFileSync(keyFile, 'utf8').trim(), 'base64url')
+let keyText = process.env.STORYTIME_LIBRARY_KEY
+if (!keyText) {
+  keyText = b64url(crypto.getRandomValues(new Uint8Array(32)))
+  const env = fs.existsSync(envFile) ? fs.readFileSync(envFile, 'utf8') : ''
+  fs.writeFileSync(envFile, /^STORYTIME_LIBRARY_KEY=.*$/m.test(env)
+    ? env.replace(/^STORYTIME_LIBRARY_KEY=.*$/m, `STORYTIME_LIBRARY_KEY=${keyText}`)
+    : `${env}STORYTIME_LIBRARY_KEY=${keyText}\n`, {mode: 0o600})
+  console.log(`new library key written to ${envFile}`)
+}
+const rawKey = Buffer.from(keyText.trim(), 'base64url')
 const key = await subtle.importKey('raw', rawKey, 'AES-GCM', false, ['encrypt'])
 const hmacKey = await subtle.importKey('raw', rawKey, {name: 'HMAC', hash: 'SHA-256'}, false, ['sign'])
 
