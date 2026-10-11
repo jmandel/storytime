@@ -56,7 +56,8 @@ without a call, with "Download PDF" (one page per book page: the picture and its
 `#view=` links can be bookmarked; they use the library key saved on the device.
 
 Back is guarded (`src/lib/guard.js`): on the start screen Back asks "Leave Storytime?" (an extra history entry
-sits on top), and during a call Back asks "Leave the call?"; the Leave button leaves without asking and replaces
+sits on top), and during a call Back asks "Leave the call?" (entries the app has been on are stamped in
+`history.state`, so a newly opened link is never mistaken for Back); the Leave button leaves without asking and replaces
 the call in history. Navigate with `go`/`goReplace` from `src/lib/links.js`, never by setting `location.hash`
 directly, so the guard can tell the app's own navigation from Back.
 
@@ -82,12 +83,26 @@ reader's tablet saves only recent books.
    - **Order.** Pages out of order (scanned in the wrong sequence, the back cover first, a page missed and added at
      the end): rename the files so `page-00` ... `page-NN` follow the book (story text, printed page numbers and
      the art make the order clear). Rename through temporary names so nothing is overwritten.
-   - **Duplicates and overlaps.** Delete a page photographed twice. When a photo also catches part of the
-     neighbouring page (the previous page's words at the edge), keep it but transcribe only that page's own words.
-   - **Splits.** If the scan has a spread as two photos, or one page per photo, either is fine; keep what was
-     scanned, one entry per image.
+   - **One image per spread.** Each page entry must match what the child sees with the book open: the whole
+     two-page spread, with all of its words. If a spread was photographed as two halves (one page per photo, as
+     phone scans of bigger books often are), join them side by side:
+     `magick left.jpg right.jpg -resize x1600 +append -resize '2400x1600>' -quality 84 page-NN.jpg`
+     and combine their words (left page first, a blank line between). Books printed with facing pages (chapter
+     books, compendiums) are joined the same way: even page on the left (158|159, 160|161, ...; check which side
+     the gutter or page border is on), labelled `"Pages 158–159"`. A half that is only a picture is the classic
+     sign of a split spread; never leave a "no words" half next to a half with words.
+   - **Duplicates and overlaps.** Delete a page photographed twice. When one photo shows a whole spread and another
+     only half of it, build the spread from the best parts (crop the missing half out of the wider photo with
+     `magick in.jpg -crop WxH+X+Y +repage out.jpg`, then join). When a photo also catches the edge of a
+     neighbouring page, crop it off or keep it but transcribe only that page's own words.
+   - **Leftovers.** Drop pages that aren't part of the story for the child: ads, order forms, printer's details
+     (a back cover that is only an ad). Keep a back cover with a short blurb.
    - **Missing or unreadable.** If a page is missing, blurry, glared over or cut off so the words can't be read,
      say which one and ask for a re-shoot rather than guessing. A missing cover or back cover is fine.
+   - **Then look at the result:** make a contact sheet (`magick montage page-*.jpg -tile 6x -geometry 300x220+4+4
+     sheet.jpg`) and view it: every image upright, one per spread, in order, nothing left over.
+   **If you can't find or fix something, say so** in your reply (which page, what is wrong, what you need), and
+   still add the rest of the book. Don't silently leave a sideways page, a half spread or a guessed word.
    Tell the parent briefly what you fixed (e.g. "page 4 was sideways; I turned it").
 3. **Write `book.json`** in that folder. Read every page image yourself and type the words exactly as printed.
 4. **Pack:** `npm run pack` (encrypts every book folder in `$STORYTIME_BOOKS` into `books/`)
@@ -147,10 +162,12 @@ shelf, opening to its contents, with each story packed as its own file so the bo
         book.json            {"id": "ice-cream", "title": "Ice Cream", "pages": [...], "voices"?, "start"?}
         page-00.jpg ...
 
-- A story's pages are labelled with the printed page numbers (`"label": "Page 158"`); stories are listed in order of
-  their first printed page (or `"start"`), so they slot into place whatever order they are scanned in.
+- A story's pages are spreads of facing pages labelled with the printed numbers (`"label": "Pages 158–159"`);
+  stories are listed in order of their first printed page (or `"start"`), so they slot into place whatever order
+  they are scanned in. A story that starts on a right-hand page starts with a single page (`"Page 157"`).
 - The first page of a story is usually its title page: keep the story title as the first line of its text.
-- A page with only a picture gets `"text": ""` and `"note": "Picture page: no words"`.
+- A spread with only pictures (rare once facing pages are joined) gets `"text": ""` and `"note": "Picture page: no
+  words"`.
 - In the app a story's id is `<collection>/<story>`; it can be in tonight's stack, recent books and the pickers like
   any book, and its last page offers "Next story" in the collection.
 
@@ -180,6 +197,12 @@ Wrap dialogue in `[Speaker: ...]`; narration stays plain:
 The reader's tablet shows each speaker's words in their color, and the speaker's name where the narration mentions
 it ("said Frog", "cried a squirrel") in the same color. Put every speaker in `voices` (or the collection's
 `voices`) so a name that only appears in narration on some page still gets its color.
+
+### Auditing the library
+
+When asked to audit (or after changing these rules), make a contact sheet of every book folder and check each one
+against the list in step 2; fix what you can, repack, and report per book what you changed and what still needs a
+re-shoot.
 
 ### Long pages (chapter books)
 

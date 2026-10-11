@@ -17,8 +17,14 @@ let leaving = false, restoring = false, exiting = false, own = false
 export const markOwnNavigation = () => { own = true }
 export const leaveCallOnPurpose = () => { leaving = true }
 
+// Every history entry the app has been on gets a stamp in history.state. A popstate to an unstamped entry is a new
+// navigation (a link or address opened in this tab, or the app's own hash change), not Back.
+const stamp = () => { if (!history.state) history.replaceState({storytime: true}, '', location.href) }
+
 export function installBackGuards() {
+  stamp()
   addEventListener('hashchange', e => {
+    stamp()
     if (restoring) { restoring = false; return }
     if (exiting) return
     if (isCall(e.oldURL) && !isCall(e.newURL)) {
@@ -32,6 +38,7 @@ export function installBackGuards() {
   })
   addEventListener('popstate', e => {
     if (own) { own = false; return }
+    if (!e.state) return  // a new entry, not Back
     // Leaving: keep stepping back past Storytime's own entries until the browser leaves the page.
     if (exiting) return history.back()
     if (!isHome() || e.state?.storytimeGuard) return

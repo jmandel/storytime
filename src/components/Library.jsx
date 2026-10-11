@@ -16,6 +16,14 @@ function BookButton({entry, current, pickNumber, onClick}) {
   )
 }
 
+// "Pages 158–169" from the first and last page labels' printed numbers ("Pages 158–159" ... "Pages 168–169").
+function pageRange(s) {
+  const nums = [s.first, s.last].map(l => l?.match(/\d+/g)).filter(Boolean)
+  if (!nums.length) return null
+  const from = nums[0][0], to = nums.at(-1).at(-1)
+  return from === to ? `Page ${from}` : `Pages ${from}–${to}`
+}
+
 function Stories({collection, current, picked, onPick, onBack}) {
   return (
     <section className="stories">
@@ -27,7 +35,7 @@ function Stories({collection, current, picked, onPick, onBack}) {
           return (
             <button key={s.id} className={s.id === current || n ? 'cur' : ''} onClick={() => onPick(s.id)}>
               <span className="storyTitle">{s.title}</span>
-              {s.first && <span className="storyPages">{s.first === s.last ? s.first : `${s.first}–${s.last?.replace(/^Page /, '')}`}</span>}
+              {pageRange(s) && <span className="storyPages">{pageRange(s)}</span>}
               {n ? <span className="pickNum">{n}</span> : null}
             </button>
           )

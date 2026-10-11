@@ -224,26 +224,27 @@ export function Page({book, pageNo, goTo, nextStory, onNextStory}) {
   const page = book.pages[pageNo]
   const readerRef = useRef(), textRef = useRef(), wrapRef = useRef(), stripRef = useRef()
 
-  // Largest type (up to 64px) at which the whole page's words fit their box, whatever the screen. If the words
-  // would end up small, hide the page picture (the real book is on the video anyway) and fit again. Below
-  // MIN_TEXT the words stay at MIN_TEXT and the box scrolls, with a "more" cue.
+  // Largest type at which the whole page's words fit their box: up to about a twelfth of the box's width (so ~30px
+  // on a phone, up to 64px on a tablet), never below MIN_TEXT. The picture keeps a fixed height on every page and
+  // is hidden only when the words would not fit even at MIN_TEXT (the real book is on the video anyway); below
+  // that the box scrolls, with a "more" cue.
   const fit = () => {
     const el = textRef.current, box = readerRef.current
     if (!el || !box) return
+    const fits = () => el.scrollHeight <= el.clientHeight && el.scrollWidth <= el.clientWidth
     const size = () => {
-      if (!el.clientHeight) return 99
-      let lo = MIN_TEXT, hi = 64
+      let lo = MIN_TEXT, hi = Math.max(MIN_TEXT + 1, Math.min(64, Math.round(el.clientWidth / 12)))
       while (hi - lo > 1) {
         const mid = (lo + hi) >> 1
         el.style.fontSize = `${mid}px`
-        if (el.scrollHeight <= el.clientHeight && el.scrollWidth <= el.clientWidth) lo = mid
+        if (fits()) lo = mid
         else hi = mid
       }
       el.style.fontSize = `${lo}px`
-      return lo
     }
     box.classList.remove('noimg')
-    if (size() < 26 && box.querySelector('#pageImg')?.offsetHeight) {
+    size()
+    if (!fits() && page.text && box.querySelector('#pageImg')?.offsetHeight) {
       box.classList.add('noimg')
       size()
     }

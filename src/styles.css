@@ -39,7 +39,7 @@ p { margin:0; color:var(--muted); max-width:28em; }
 #bookTitle { flex:1; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 #bookHead button { padding:.4em 1em; font-size:.8em; }
 #reader { flex:1; display:flex; flex-direction:column; min-height:0; }
-#pageImg { display:block; max-width:calc(100% - 24px); max-height:30vh; margin:12px auto 0; border-radius:8px; object-fit:contain; }
+#pageImg { display:block; height:30vh; width:auto; max-width:calc(100% - 24px); margin:12px auto 0; border-radius:8px; object-fit:contain; }
 #textWrap { flex:1; position:relative; min-height:0; display:flex; }
 #textWrap::after { content:""; position:absolute; left:0; right:0; bottom:0; height:2.5em; pointer-events:none;
   background:linear-gradient(transparent, var(--panel)); opacity:0; transition:opacity .2s; }
@@ -102,14 +102,14 @@ button.danger { color:var(--warn); }
 @media (orientation: portrait) {
   #call.reader { flex-direction:column; }
   #call.reader #stage { flex:0 0 36%; }
-  #pageImg { max-height:18vh; }
+  #pageImg { height:20vh; }
 }
 #reader.noimg #pageImg { display:none; }
 /* Phones: give the words the room. */
 @media (orientation: portrait) and (max-width: 600px) {
   #call.reader #stage { flex:0 0 34%; }
   #self { width:22vmin; }
-  #pageImg { max-height:13vh; margin-top:8px; }
+  #pageImg { height:15vh; margin-top:8px; }
   #pageText { padding:8px 16px; }
   #nav { padding:6px 12px; }
   #nav button { font-size:1.05em; padding:.35em; }
@@ -146,5 +146,5 @@ p.small { font-size:.8em; }
 #nextStory { margin:0 14px 4px; }
 #viewer { padding:0; background:var(--bg); }
 #book.viewer { position:absolute; inset:0; padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); }
-#book.viewer #pageImg { max-height:48vh; }
+#book.viewer #pageImg { height:44vh; }
 #bookHead #downloadBtn, #bookHead #viewerClose { white-space:nowrap; }
