@@ -1,9 +1,9 @@
 // The parent's phone before a call: who's reading, tonight's books, start (or get back to) a call, settings.
 import {useEffect, useState} from 'react'
-import {guardHome} from '../lib/guard.js'
+import {guardHome, useBackLayer} from '../lib/guard.js'
 import {Library} from './Library.jsx'
 import {useLibrary} from '../lib/library.js'
-import {go, linkWith, randomId, shareLink} from '../lib/links.js'
+import {go, goReplace, linkWith, randomId, shareLink} from '../lib/links.js'
 import {LAST_CALLS, RECENT, SETUP, homeLinkParams, setupParams, update, useStored, write} from '../lib/store.js'
 
 export function Home() {
@@ -12,6 +12,9 @@ export function Home() {
   const [picked, setPicked] = useState([])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [browsing, setBrowsing] = useState(false)
+  useBackLayer(!!invite, () => setInvite(null))
+  useBackLayer(settingsOpen, () => setSettingsOpen(false))
+  useBackLayer(browsing, () => setBrowsing(false))
   const reader = setup?.current || ''
   const {books, error} = useLibrary(setup?.lk, setup?.lib)
   useEffect(guardHome, [])
@@ -126,7 +129,7 @@ function Invite({reader, child, readerLink, childParams}) {
         {copied ? 'Copied' : 'Copy link'}
       </button>
       <div id="linkbox">{readerLink}</div>
-      <button id="goBtn" className="ghost" onClick={() => go(childParams)}>Open the call</button>
+      <button id="goBtn" className="ghost" onClick={() => goReplace(childParams)}>Open the call</button>
     </section>
   )
 }

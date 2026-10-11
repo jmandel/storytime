@@ -3,6 +3,7 @@
 // and Toad compendium) is one card; tapping it shows its stories, and a story is picked like a book.
 import {useState} from 'react'
 import {entriesById} from '../lib/library.js'
+import {useBackLayer} from '../lib/guard.js'
 import {RECENT, useStored} from '../lib/store.js'
 
 function BookButton({entry, current, pickNumber, onClick}) {
@@ -50,6 +51,7 @@ function Stories({collection, current, picked, onPick, onBack}) {
 export function Library({id, books, stack = [], picked, current, onPick, openCollection}) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(openCollection || null)
+  useBackLayer(!!open && open !== openCollection, () => setOpen(null))
   const recent = useStored(RECENT) || []
   const byId = entriesById(books)
   const pick = entryId => onPick(byId.get(entryId))

@@ -1,4 +1,9 @@
-// Confirm before Back leaves Storytime or drops a call.
+import {useEffect} from 'react'
+
+// Back inside Storytime, and confirming before Back leaves it or drops a call.
+// - Layers (the invite screen, settings, book lists, a collection's contents, the in-call picker) are drawn over a
+//   screen without changing the address. Each open layer has its own history entry (useBackLayer), so Back closes
+//   the top layer and nothing else.
 // - Start screen: an extra history entry sits on top, so Back lands on it and asks "Leave Storytime?" before going
 //   further back (out of the app).
 // - Call: Back changes the hash away from the call link; ask "Leave the call?" and, if not, go forward again. This
@@ -38,6 +43,8 @@ export function installBackGuards() {
   })
   addEventListener('popstate', e => {
     if (own) { own = false; return }
+    if (layers.length) { const top = layers.pop(); top.popped = true; top.close(); return }
+    if (e.state?.layer) return  // a stale layer entry (its layer is gone); stay put
     if (!e.state) return  // a new entry, not Back
     // Leaving: keep stepping back past Storytime's own entries until the browser leaves the page.
     if (exiting) return history.back()
@@ -50,4 +57,23 @@ export function installBackGuards() {
 // Called when the start screen shows: make sure the guard entry is on top.
 export function guardHome() {
   if (!history.state?.storytimeGuard) history.pushState({storytimeGuard: true}, '', location.href)
+}
+
+// While `open`, a layer owns a history entry: Back calls `close`. Closing it another way (a button, picking
+// something) removes the entry again, unless the app has already navigated elsewhere (then the entry is left
+// behind and skipped on Back).
+const layers = []
+let layerIds = 0
+export function useBackLayer(open, close) {
+  useEffect(() => {
+    if (!open) return
+    const entry = {id: ++layerIds, close, popped: false}
+    history.pushState({storytime: true, layer: entry.id}, '', location.href)
+    layers.push(entry)
+    return () => {
+      const i = layers.indexOf(entry)
+      if (i >= 0) layers.splice(i, 1)
+      if (!entry.popped && history.state?.layer === entry.id) { own = true; history.back() }
+    }
+  }, [open])
 }

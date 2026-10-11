@@ -55,7 +55,9 @@ The start screen's "Look at the books" opens any book (or story) in a new tab at
 without a call, with "Download PDF" (one page per book page: the picture and its words; jsPDF is loaded only then).
 `#view=` links can be bookmarked; they use the library key saved on the device.
 
-Back is guarded (`src/lib/guard.js`): on the start screen Back asks "Leave Storytime?" (an extra history entry
+Back moves around inside the app: screens drawn on top without changing the address (the invite, Settings, the
+book list, a collection's contents, the in-call picker and shelf) each register with `useBackLayer(open, close)`,
+so Back closes the top one. Any new overlay or sub-screen must do the same. Back is guarded (`src/lib/guard.js`): on the start screen Back asks "Leave Storytime?" (an extra history entry
 sits on top), and during a call Back asks "Leave the call?" (entries the app has been on are stamped in
 `history.state`, so a newly opened link is never mistaken for Back); the Leave button leaves without asking and replaces
 the call in history. Navigate with `go`/`goReplace` from `src/lib/links.js`, never by setting `location.hash`

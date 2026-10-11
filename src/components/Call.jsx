@@ -7,7 +7,7 @@ import {SpeakerText} from './SpeakerText.jsx'
 import {useCall, useWakeLock} from '../lib/call.js'
 import {entriesById, openBook as fetchBook, pageLabel, useLibrary} from '../lib/library.js'
 import {goReplace} from '../lib/links.js'
-import {leaveCallOnPurpose} from '../lib/guard.js'
+import {leaveCallOnPurpose, useBackLayer} from '../lib/guard.js'
 import {SETUP, read, rememberBook} from '../lib/store.js'
 
 export function CallRoute({params}) {
@@ -97,6 +97,7 @@ function Call({params, stream}) {
 function useChildBooks({params, call, handlers, reader, enabled}) {
   const [remoteState, setRemoteState] = useState(null)
   const [pickerOpen, setPickerOpen] = useState(false)
+  useBackLayer(pickerOpen, () => setPickerOpen(false))
   const pending = useRef(null)
   const {books} = useLibrary(params.get('lk'), params.get('lib'))
   const stack = (params.get('b') || '').split(',').filter(Boolean)
@@ -149,6 +150,7 @@ function ReaderBook({params, call, handlers}) {
   const [loading, setLoading] = useState(null)
   const [error, setError] = useState('')
   const [shelfOpen, setShelfOpen] = useState(false)
+  useBackLayer(shelfOpen && !!book, () => setShelfOpen(false))
   const opened = useRef(false)
   const byId = entriesById(books)
   const entry = book && byId.get(book.id)
