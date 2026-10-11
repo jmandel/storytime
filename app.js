@@ -305,17 +305,24 @@ function showRemoteState(p) {
 
 // Largest type (up to 64px) at which the whole page's words fit their box, whatever the screen.
 // If the words would end up small, hide the page picture (the real book is on the video anyway) and fit again.
+// Below MIN_TEXT the words stay at MIN_TEXT and the box scrolls, with a "more" cue.
+const MIN_TEXT = 22
 function fitText() {
   $('reader').classList.remove('noimg')
   if (fitSize() < 26 && $('pageImg').offsetHeight) {
     $('reader').classList.add('noimg')
     fitSize()
   }
+  moreCue()
+}
+function moreCue() {
+  const el = $('pageText')
+  $('textWrap').classList.toggle('more', el.scrollTop + el.clientHeight < el.scrollHeight - 4)
 }
 function fitSize() {
   const el = $('pageText')
   if (!el.clientHeight) return 99
-  let lo = 16, hi = 64
+  let lo = MIN_TEXT, hi = 64
   while (hi - lo > 1) {
     const mid = (lo + hi) >> 1
     el.style.fontSize = `${mid}px`
@@ -326,6 +333,7 @@ function fitSize() {
   return lo
 }
 addEventListener('resize', () => fitText())
+$('pageText').addEventListener('scroll', moreCue)
 
 $('prevBtn').onclick = () => goTo(pageNo - 1)
 $('nextBtn').onclick = () => goTo(pageNo + 1)

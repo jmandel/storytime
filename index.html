@@ -48,6 +48,12 @@
   #bookHead button { padding:.4em 1em; font-size:.8em; }
   #reader { flex:1; display:flex; flex-direction:column; min-height:0; }
   #pageImg { display:block; max-width:calc(100% - 24px); max-height:30vh; margin:12px auto 0; border-radius:8px; object-fit:contain; }
+  #textWrap { flex:1; position:relative; min-height:0; display:flex; }
+  #textWrap::after { content:""; position:absolute; left:0; right:0; bottom:0; height:2.5em; pointer-events:none;
+    background:linear-gradient(transparent, var(--panel)); opacity:0; transition:opacity .2s; }
+  #moreCue { position:absolute; right:16px; bottom:4px; font-size:.8em; color:var(--accent); opacity:0; transition:opacity .2s;
+    pointer-events:none; z-index:1; }
+  #textWrap.more::after, #textWrap.more #moreCue { opacity:1; }
   #pageNote { color:var(--accent); text-align:center; font-size:.9em; margin-top:8px; }
   #pageText { flex:1; overflow:auto; padding:12px 20px; line-height:1.35;
     white-space:pre-line; }
@@ -160,7 +166,7 @@
     <div id="reader" style="display:none">
       <img id="pageImg" alt="">
       <div id="pageNote"></div>
-      <div id="pageText"></div>
+      <div id="textWrap"><div id="pageText"></div><div id="moreCue">more ↓</div></div>
       <div id="nav">
         <button id="prevBtn" class="ghost" aria-label="Previous page">◀</button>
         <div id="pageNum"></div>
