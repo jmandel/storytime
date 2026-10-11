@@ -206,8 +206,8 @@ re-shoot.
 
 ### Long pages (chapter books)
 
-The reader's panel fits each page's words as large as they go (up to 64px), hides the page picture if that is
-needed to stay readable, and scrolls below 22px with a "more" cue. Long pages work as they are; prefer `label`s that
+The reader's panel always shows the page picture at a steady height and fits the words as large as they go
+(about a twelfth of the panel width, at most 64px); below 22px they scroll with a "more" cue. Long pages work as they are; prefer `label`s that
 match printed page numbers so "Pages 12-13" on the tablet matches the book in the child's hands.
 
 ## Making an original book with Codex

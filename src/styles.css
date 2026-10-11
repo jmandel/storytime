@@ -104,7 +104,6 @@ button.danger { color:var(--warn); }
   #call.reader #stage { flex:0 0 36%; }
   #pageImg { height:20vh; }
 }
-#reader.noimg #pageImg { display:none; }
 /* Phones: give the words the room. */
 @media (orientation: portrait) and (max-width: 600px) {
   #call.reader #stage { flex:0 0 34%; }

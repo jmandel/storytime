@@ -225,9 +225,8 @@ export function Page({book, pageNo, goTo, nextStory, onNextStory}) {
   const readerRef = useRef(), textRef = useRef(), wrapRef = useRef(), stripRef = useRef()
 
   // Largest type at which the whole page's words fit their box: up to about a twelfth of the box's width (so ~30px
-  // on a phone, up to 64px on a tablet), never below MIN_TEXT. The picture keeps a fixed height on every page and
-  // is hidden only when the words would not fit even at MIN_TEXT (the real book is on the video anyway); below
-  // that the box scrolls, with a "more" cue.
+  // on a phone, up to 64px on a tablet), never below MIN_TEXT. The picture always shows, at the same height on
+  // every page; words that don't fit at MIN_TEXT scroll, with a "more" cue.
   const fit = () => {
     const el = textRef.current, box = readerRef.current
     if (!el || !box) return
@@ -242,12 +241,7 @@ export function Page({book, pageNo, goTo, nextStory, onNextStory}) {
       }
       el.style.fontSize = `${lo}px`
     }
-    box.classList.remove('noimg')
     size()
-    if (!fits() && page.text && box.querySelector('#pageImg')?.offsetHeight) {
-      box.classList.add('noimg')
-      size()
-    }
     moreCue()
   }
   const moreCue = () => {
