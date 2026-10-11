@@ -1,6 +1,7 @@
 // Encrypt a folder of books for the site.
 // usage: node tools/pack-books.mjs <books dir> <out dir>
-// Each <books dir>/<book>/book.json has {id, title, author, tags?, pages: [{img, text, label?, note?}]}; images sit beside it.
+// Each <books dir>/<book>/book.json has {id, title, author, tags?, voices?, pages: [{img, text, label?, note?}]}; images sit
+// beside it. Page text can mark speakers inline: [Frog: "Toad, Toad,"] shouted Frog. voices maps a speaker to a color.
 // The library key (32 random bytes, base64url) lives in <books dir>/.library-key and is created on first run.
 // Output: <out dir>/index.bin (book list with small covers) and one <hash>.bin per book, all AES-GCM encrypted.
 // The app reads them with the key from the link (#lk=...), so the files are safe to publish.

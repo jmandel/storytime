@@ -224,7 +224,7 @@ function goTo(i) {
   const p = book.pages[pageNo]
   $('pageImg').src = p.img
   $('pageNote').textContent = p.note || ''
-  $('pageText').textContent = p.text
+  $('pageText').replaceChildren(...renderText(p.text, book.voices))
   $('pageText').scrollTop = 0
   fitText()
   $('pageNum').textContent = pageLabel(pageNo)
@@ -358,6 +358,34 @@ function showRemoteState(p) {
   $('pageBadge').style.display = p ? 'block' : 'none'
   $('childNav').style.display = p ? 'flex' : 'none'
   if (p) $('pageBadge').textContent = `${cap(reader)}: ${p.title}, ${p.label}`
+}
+
+// Page text may mark who is talking: [Frog: "Toad, Toad,"] shouted Frog. Each speaker gets a color (from the
+// book's "voices", or a default palette) and a small name label whenever the speaker changes.
+const VOICE_COLORS = ['#7bd88f', '#ffb347', '#8ab4ff', '#ff8fb1', '#c8a2ff', '#5fd3d0']
+function renderText(text, voices = {}) {
+  const colors = {...voices}
+  let last = null
+  const out = []
+  for (const part of text.split(/(\[[^\]:]+:[^\]]*\])/)) {
+    const m = part.match(/^\[([^\]:]+):\s*([^\]]*)\]$/)
+    if (!m) { if (part) out.push(document.createTextNode(part)); continue }
+    const [, who, said] = m
+    colors[who] ??= VOICE_COLORS[Object.keys(colors).length % VOICE_COLORS.length]
+    const span = document.createElement('span')
+    span.className = 'said'
+    span.style.color = colors[who]
+    if (who !== last) {
+      const tag = document.createElement('span')
+      tag.className = 'who'
+      tag.textContent = who
+      span.append(tag)
+    }
+    span.append(said)
+    out.push(span)
+    last = who
+  }
+  return out
 }
 
 // Largest type (up to 64px) at which the whole page's words fit their box, whatever the screen.
