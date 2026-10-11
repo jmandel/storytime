@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Storytime preview</title>
+<style>
+  html, body { margin:0; height:100%; background:#111; color:#ddd; font:15px/1.4 system-ui, sans-serif; }
+  main { display:flex; gap:24px; align-items:flex-start; justify-content:center; padding:16px; flex-wrap:wrap; }
+  figure { margin:0; }
+  figcaption { margin-bottom:6px; color:#aaa; }
+  iframe { border:10px solid #333; border-radius:18px; background:#000; display:block; }
+  #tablet { width:1024px; height:720px; }
+  #phone { width:390px; height:720px; }
+  .box { transform-origin:top left; overflow:hidden; }
+</style>
+</head>
+<body>
+<main>
+  <figure><figcaption>Grandma's tablet</figcaption><div class="box"><iframe id="tablet" allow="camera; microphone; autoplay; clipboard-write"></iframe></div></figure>
+  <figure><figcaption>Cleo's phone on the stand</figcaption><div class="box"><iframe id="phone" allow="camera; microphone; autoplay; clipboard-write"></iframe></div></figure>
+</main>
+<script>
+  // Both views join a fresh room; this page's own #lk=... (and any other settings) are passed through.
+  const p = new URLSearchParams(location.hash.slice(1))
+  const rand = n => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(n)))).replace(/[+/=]/g, '')
+  p.set('r', rand(12)); p.set('k', rand(18)); p.set('preview', '1')
+  const src = role => { const q = new URLSearchParams(p); q.set('as', role); return `index.html#${q}` }
+  document.getElementById('tablet').src = src('grandma')
+  document.getElementById('phone').src = src('kid')
+  // Shrink both frames to fit narrow windows.
+  const fit = () => {
+    const total = 1024 + 390 + 24 + 32 + 40
+    const s = Math.min(1, window.innerWidth / total)
+    document.querySelectorAll('.box').forEach(b => {
+      b.style.transform = `scale(${s})`
+      b.style.width = `${b.firstElementChild.offsetWidth * s}px`
+      b.style.height = `${b.firstElementChild.offsetHeight * s}px`
+    })
+  }
+  addEventListener('resize', fit); fit()
+</script>
+</body>
+</html>
