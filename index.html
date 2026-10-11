@@ -64,6 +64,18 @@
   #shelf img { width:100%; border-radius:10px; display:block; margin-bottom:6px; }
   #shelfMsg { padding:16px; color:var(--muted); }
 
+  .mini-shelf { display:grid; grid-template-columns:repeat(auto-fill, minmax(96px, 1fr)); gap:12px; width:100%; max-width:520px; }
+  .mini-shelf button { background:none; padding:6px; border-radius:12px; color:var(--fg); font-weight:500; font-size:.75em;
+    border:3px solid transparent; }
+  .mini-shelf button.cur { border-color:var(--accent); }
+  .mini-shelf img { width:100%; border-radius:8px; display:block; margin-bottom:4px; }
+  #picker { position:fixed; inset:0; background:#000c; display:none; align-items:center; justify-content:center; z-index:10; padding:16px; }
+  #picker.on { display:flex; }
+  #pickerSheet { background:var(--panel); border-radius:16px; padding:18px; width:100%; max-width:560px; max-height:90vh; overflow:auto;
+    display:flex; flex-direction:column; align-items:center; gap:14px; }
+  #pickerSheet h2 { margin:0; font-size:1.2em; }
+  #kidNav { position:absolute; right:12px; top:calc(84px + env(safe-area-inset-top)); display:none; gap:8px; }
+  #kidNav button { padding:.35em .9em; font-size:.85em; }
   /* Tablet held upright: video on top, book below. */
   @media (orientation: portrait) {
     body.grandma #call { flex-direction:column; }
@@ -77,6 +89,7 @@
 <section id="start" class="screen center">
   <h1>Storytime</h1>
   <p>Start a call here, then send the link to Grandma.</p>
+  <div id="startShelf" class="mini-shelf"></div>
   <button id="startBtn">Start a call</button>
 </section>
 
@@ -104,7 +117,12 @@
     <div id="pageBadge"></div>
     <div id="bar">
       <button id="muteBtn" class="ghost">Mute</button>
+      <button id="bookBtn" class="ghost" style="display:none">Book</button>
       <button id="leaveBtn" class="ghost">Leave</button>
+    </div>
+    <div id="kidNav">
+      <button id="kidPrev" class="ghost" aria-label="Previous page">◀</button>
+      <button id="kidNext" class="ghost" aria-label="Next page">▶</button>
     </div>
   </div>
   <div id="book">
@@ -127,6 +145,14 @@
     </div>
   </div>
 </section>
+
+<div id="picker">
+  <div id="pickerSheet">
+    <h2>Pick a book</h2>
+    <div id="pickerShelf" class="mini-shelf"></div>
+    <button id="pickerClose" class="ghost">Close</button>
+  </div>
+</div>
 
 <script type="module" src="app.js"></script>
 </body>

@@ -2,7 +2,8 @@ import {joinRoom} from './vendor/trystero-nostr.js'
 
 // Link format (everything lives after '#', so it never reaches the web server):
 //   #r=<room>&k=<secret>&as=grandma|kid&lk=<library key>
-//   optional: &lib=<url of the encrypted books folder> (default: books/ next to this page)
+//   optional: &b=<book id> (the book to open first)
+//             &lib=<url of the encrypted books folder> (default: books/ next to this page)
 //             &relay=wss://a,wss://b (our own signaling relays instead of the defaults)
 //             &turn=<base64url JSON iceServers> (TURN servers for networks that block direct calls)
 //             &preview=1 (join straight away with incoming audio muted; used by preview.html)
@@ -46,6 +47,7 @@ $('startBtn').onclick = () => {
   const p = new URLSearchParams(params)
   p.set('r', randomId(12))
   p.set('k', randomId(18))
+  if (startPick) p.set('b', startPick); else p.delete('b')
   const grandma = linkFor('grandma', p)
   $('linkbox').textContent = grandma
   $('shareBtn').style.display = navigator.share ? '' : 'none'
@@ -58,7 +60,7 @@ $('startBtn').onclick = () => {
   show('invite')
 }
 
-let room, selfStream, peerId = null, sendPage = () => {}
+let room, selfStream, peerId = null, sendState = () => {}
 
 async function join() {
   $('joinErr').textContent = ''
@@ -77,19 +79,21 @@ async function join() {
   waiting(true)
   keepAwake()
   if (isGrandma) loadShelf()
+  else if (params.get('lk')) setupKidBooks()
 
   room = joinRoom(config(), params.get('r'), {
     onJoinError: d => status(`Can't join: ${d.error || 'wrong link?'}`, 'warn'),
   })
-  const page = room.makeAction('page')
-  sendPage = (data, target) => page.send(data, target ? {target} : undefined)
-  page.onMessage = p => {
-    $('pageBadge').style.display = p ? 'block' : 'none'
-    if (p) $('pageBadge').textContent = `Grandma: ${p.title}, ${p.label}`
+  const action = room.makeAction('book')
+  sendState = (data, target) => action.send(data, target ? {target} : undefined)
+  action.onMessage = msg => {
+    if (isGrandma && msg?.want) return follow(msg.want)
+    if (!isGrandma) showRemoteState(msg)
   }
   room.onPeerJoin = id => {
     room.addStream(selfStream, {target: id})
-    if (isGrandma) sendPage(currentPage(), id)
+    sendState(isGrandma ? currentPage() : pendingWant && {want: pendingWant}, id)
+    pendingWant = null
     status('Connecting…')
   }
   room.onPeerStream = (stream, id) => {
@@ -150,7 +154,7 @@ async function keepAwake() {
 
 // Books: encrypted files (12-byte IV + AES-GCM ciphertext of JSON) opened with the library key from the link.
 const libBase = new URL(params.get('lib') || 'books/', location.href)
-let libKey, book = null, pageNo = 0
+let libKey, book = null, pageNo = 0, shelfBooks = []
 
 async function openSealed(file) {
   libKey ??= await crypto.subtle.importKey('raw', fromB64url(params.get('lk')), 'AES-GCM', false, ['decrypt'])
@@ -176,7 +180,9 @@ async function loadShelf() {
       return btn
     }))
     $('shelfMsg').textContent = ''
-    if (books.length === 1) openBook(books[0])
+    shelfBooks = books
+    const first = books.find(b => b.id === params.get('b')) || (books.length === 1 && books[0])
+    if (first) openBook(first)
     else showShelf()
   } catch (e) {
     $('shelfMsg').textContent = `Couldn't open the books (${e.message}).`
@@ -188,10 +194,10 @@ function showShelf() {
   $('bookTitle').textContent = 'Pick a book'
   $('reader').style.display = 'none'
   $('shelf').classList.add('on')
-  sendPage(null)
+  sendState(null)
 }
 
-async function openBook(entry) {
+async function openBook(entry, startPage = 0) {
   $('shelf').classList.remove('on')
   $('bookTitle').textContent = `${entry.title}…`
   try {
@@ -209,11 +215,11 @@ async function openBook(entry) {
     return img
   }))
   $('reader').style.display = 'flex'
-  goTo(0)
+  goTo(startPage)
 }
 
 const pageLabel = i => book.pages[i].label || `Page ${i}`
-const currentPage = () => book && {title: book.title, page: pageNo, label: pageLabel(pageNo)}
+const currentPage = () => book && {id: book.id, title: book.title, page: pageNo, label: pageLabel(pageNo)}
 
 function goTo(i) {
   if (!book) return
@@ -228,7 +234,68 @@ function goTo(i) {
   $('nextBtn').disabled = pageNo === book.pages.length - 1
   ;[...$('strip').children].forEach((img, j) => img.classList.toggle('cur', j === pageNo))
   $('strip').children[pageNo]?.scrollIntoView({inline: 'center', block: 'nearest', behavior: 'smooth'})
-  sendPage(currentPage())
+  sendState(currentPage())
+}
+
+// Grandma's tablet: apply a book/page change asked for from the phone.
+function follow(want) {
+  if (book && want.id === book.id) return goTo(want.page ?? pageNo)
+  const entry = shelfBooks.find(b => b.id === want.id)
+  if (entry) openBook(entry, want.page ?? 0)
+}
+
+// The phone: pick books before and during the call, nudge pages, and show what Grandma's tablet has open.
+let startPick = null, pendingWant = null, remoteState = null
+
+function renderShelf(el, books, current, onPick) {
+  el.replaceChildren(...books.map(b => {
+    const btn = document.createElement('button')
+    const img = document.createElement('img')
+    img.src = b.cover
+    img.alt = ''
+    btn.append(img, b.title)
+    btn.classList.toggle('cur', b.id === current)
+    btn.onclick = () => onPick(b)
+    return btn
+  }))
+}
+
+async function setupStartShelf() {
+  if (!params.get('lk')) return
+  try {
+    const {books} = await openSealed('index.bin')
+    startPick = books.find(b => b.id === params.get('b'))?.id || books[0]?.id
+    const draw = () => renderShelf($('startShelf'), books, startPick, b => { startPick = b.id; draw() })
+    draw()
+  } catch {}
+}
+
+async function setupKidBooks() {
+  let books
+  try { ({books} = await openSealed('index.bin')) } catch { return }
+  $('bookBtn').style.display = ''
+  $('bookBtn').onclick = () => {
+    renderShelf($('pickerShelf'), books, remoteState?.id, b => {
+      want({id: b.id, page: 0})
+      $('picker').classList.remove('on')
+    })
+    $('picker').classList.add('on')
+  }
+  $('pickerClose').onclick = () => $('picker').classList.remove('on')
+  $('kidPrev').onclick = () => remoteState && want({id: remoteState.id, page: remoteState.page - 1})
+  $('kidNext').onclick = () => remoteState && want({id: remoteState.id, page: remoteState.page + 1})
+}
+
+function want(w) {
+  if (peerId) sendState({want: w})
+  else pendingWant = w  // sent when Grandma joins
+}
+
+function showRemoteState(p) {
+  remoteState = p
+  $('pageBadge').style.display = p ? 'block' : 'none'
+  $('kidNav').style.display = p ? 'flex' : 'none'
+  if (p) $('pageBadge').textContent = `Grandma: ${p.title}, ${p.label}`
 }
 
 $('prevBtn').onclick = () => goTo(pageNo - 1)
@@ -262,4 +329,5 @@ if (params.get('r') && params.get('k')) {
   if (preview) join()
 } else {
   show('start')
+  setupStartShelf()
 }
