@@ -3,7 +3,7 @@ import {joinRoom} from './vendor/trystero-nostr.js'
 // Link format (everything lives after '#', so it never reaches the web server):
 //   #r=<room>&k=<secret>&as=reader|child&lk=<library key>
 //   optional: &reader=<name>&child=<name> (shown in the app, e.g. reader=Grandma&child=Cleo)
-//   optional: &b=<book id> (the book to open first)
+//   optional: &b=<id>,<id>,... (tonight's stack: shown first; the reader's tablet opens the first one)
 //             &lib=<url of the encrypted books folder> (default: books/ next to this page)
 //             &relay=wss://a,wss://b (our own signaling relays instead of the defaults)
 //             &turn=<base64url JSON iceServers> (TURN servers for networks that block direct calls)
@@ -51,7 +51,7 @@ $('startBtn').onclick = () => {
   const p = new URLSearchParams(params)
   p.set('r', randomId(12))
   p.set('k', randomId(18))
-  if (startPick) p.set('b', startPick); else p.delete('b')
+  if (stack.length) p.set('b', stack.join(',')); else p.delete('b')
   const readerLink = linkFor('reader', p)
   $('linkbox').textContent = readerLink
   $('shareBtn').style.display = navigator.share ? '' : 'none'
@@ -174,18 +174,9 @@ async function loadShelf() {
   $('shelfMsg').textContent = 'Loading books…'
   try {
     const {books} = await openSealed('index.bin')
-    $('shelf').replaceChildren(...books.map(b => {
-      const btn = document.createElement('button')
-      const img = document.createElement('img')
-      img.src = b.cover
-      img.alt = ''
-      btn.append(img, b.title)
-      btn.onclick = () => openBook(b)
-      return btn
-    }))
     $('shelfMsg').textContent = ''
     shelfBooks = books
-    const first = books.find(b => b.id === params.get('b')) || (books.length === 1 && books[0])
+    const first = books.find(b => b.id === stack[0]) || (books.length === 1 && books[0])
     if (first) openBook(first)
     else showShelf()
   } catch (e) {
@@ -197,6 +188,7 @@ function showShelf() {
   book = null
   $('bookTitle').textContent = 'Pick a book'
   $('reader').style.display = 'none'
+  renderLibrary($('shelf'), shelfBooks, {onPick: b => openBook(b)})
   $('shelf').classList.add('on')
   sendState(null)
 }
@@ -211,6 +203,7 @@ async function openBook(entry, startPage = 0) {
     return showShelf()
   }
   $('bookTitle').textContent = book.title
+  remember(book.id)
   $('strip').replaceChildren(...book.pages.map((p, i) => {
     const img = document.createElement('img')
     img.src = p.thumb
@@ -250,27 +243,90 @@ function follow(want) {
 }
 
 // The phone: pick books before and during the call, nudge pages, and show what the reader's tablet has open.
-let startPick = null, pendingWant = null, remoteState = null
+let pendingWant = null, remoteState = null
 
-function renderShelf(el, books, current, onPick) {
-  el.replaceChildren(...books.map(b => {
-    const btn = document.createElement('button')
-    const img = document.createElement('img')
-    img.src = b.cover
-    img.alt = ''
-    btn.append(img, b.title)
-    btn.classList.toggle('cur', b.id === current)
-    btn.onclick = () => onPick(b)
-    return btn
-  }))
+// Book choosing, shared by the start screen, the reader's shelf and the phone's picker:
+// tonight's stack (from the link), books this device opened recently, then everything (with search once the
+// library is big). Covers come from the small encrypted index; a whole book is only fetched when it is opened.
+const stack = (params.get('b') || '').split(',').filter(Boolean)
+const RECENT_KEY = 'storytime-recent'
+function recent() {
+  try { return JSON.parse(localStorage.getItem(RECENT_KEY)) || [] } catch { return [] }
+}
+function remember(id) {
+  try { localStorage.setItem(RECENT_KEY, JSON.stringify([id, ...recent().filter(r => r !== id)].slice(0, 8))) } catch {}
 }
 
+function bookButton(b, {current, picked, onPick}) {
+  const btn = document.createElement('button')
+  const img = document.createElement('img')
+  img.src = b.cover
+  img.alt = ''
+  btn.append(img, b.title)
+  const n = picked?.indexOf(b.id) ?? -1
+  if (n >= 0) {
+    const badge = document.createElement('span')
+    badge.className = 'pickNum'
+    badge.textContent = n + 1
+    btn.append(badge)
+  }
+  btn.classList.toggle('cur', b.id === current || n >= 0)
+  btn.onclick = () => onPick(b)
+  return btn
+}
+
+function renderLibrary(el, books, opts) {
+  const byId = new Map(books.map(b => [b.id, b]))
+  const query = el.querySelector('input')?.value || ''
+  const sections = []
+  const section = (title, list) => {
+    if (!list.length) return
+    const h = document.createElement('h3')
+    h.textContent = title
+    const grid = document.createElement('div')
+    grid.className = 'mini-shelf'
+    grid.append(...list.map(b => bookButton(b, opts)))
+    sections.push(h, grid)
+  }
+  const big = books.length > 8
+  let search
+  if (big) {
+    search = document.createElement('input')
+    search.type = 'search'
+    search.placeholder = 'Find a book'
+    search.value = query
+    search.oninput = () => renderLibrary(el, books, opts)
+    sections.push(search)
+  }
+  const q = query.trim().toLowerCase()
+  if (q) {
+    section('Found', books.filter(b => [b.title, b.author, ...(b.tags || [])].join(' ').toLowerCase().includes(q)))
+  } else {
+    const tonight = (opts.picked || stack).map(id => byId.get(id)).filter(Boolean)
+    section('Tonight', tonight)
+    if (big) section('Recent', recent().map(id => byId.get(id)).filter(b => b && !tonight.includes(b)))
+    section(tonight.length || big ? 'All books' : '', [...books].sort((a, b) => a.title.localeCompare(b.title)))
+  }
+  el.replaceChildren(...sections)
+  if (search && query) { search.focus(); search.setSelectionRange(query.length, query.length) }
+}
+
+// Start screen: tap books to build tonight's stack, in order; tap again to take one off.
 async function setupStartShelf() {
   if (!params.get('lk')) return
   try {
     const {books} = await openSealed('index.bin')
-    startPick = books.find(b => b.id === params.get('b'))?.id || books[0]?.id
-    const draw = () => renderShelf($('startShelf'), books, startPick, b => { startPick = b.id; draw() })
+    const picked = stack.filter(id => books.some(b => b.id === id))
+    stack.length = 0
+    const draw = () => renderLibrary($('startShelf'), books, {picked, onPick: b => {
+      const i = picked.indexOf(b.id)
+      if (i >= 0) picked.splice(i, 1); else picked.push(b.id)
+      stack.splice(0, stack.length, ...picked)
+      $('startHint').textContent = picked.length ? `${picked.length} book${picked.length > 1 ? 's' : ''} for tonight` : 'Tap books for tonight (optional)'
+      draw()
+    }})
+    $('startHint').textContent = 'Tap books for tonight (optional)'
+    stack.splice(0, stack.length, ...picked)
     draw()
   } catch {}
 }
@@ -280,10 +336,10 @@ async function setupChildBooks() {
   try { ({books} = await openSealed('index.bin')) } catch { return }
   $('bookBtn').style.display = ''
   $('bookBtn').onclick = () => {
-    renderShelf($('pickerShelf'), books, remoteState?.id, b => {
+    renderLibrary($('pickerShelf'), books, {current: remoteState?.id, onPick: b => {
       want({id: b.id, page: 0})
       $('picker').classList.remove('on')
-    })
+    }})
     $('picker').classList.add('on')
   }
   $('pickerClose').onclick = () => $('picker').classList.remove('on')
@@ -297,6 +353,7 @@ function want(w) {
 }
 
 function showRemoteState(p) {
+  if (p && p.id !== remoteState?.id) remember(p.id)
   remoteState = p
   $('pageBadge').style.display = p ? 'block' : 'none'
   $('childNav').style.display = p ? 'flex' : 'none'

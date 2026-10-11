@@ -1,6 +1,6 @@
 // Encrypt a folder of books for the site.
 // usage: node tools/pack-books.mjs <books dir> <out dir>
-// Each <books dir>/<book>/book.json lists pages {img, text, label?, note?}; images sit beside it.
+// Each <books dir>/<book>/book.json has {id, title, author, tags?, pages: [{img, text, label?, note?}]}; images sit beside it.
 // The library key (32 random bytes, base64url) lives in <books dir>/.library-key and is created on first run.
 // Output: <out dir>/index.bin (book list with small covers) and one <hash>.bin per book, all AES-GCM encrypted.
 // The app reads them with the key from the link (#lk=...), so the files are safe to publish.
@@ -24,7 +24,7 @@ async function seal(obj) {
   return Buffer.concat([iv, Buffer.from(ct)])
 }
 const dataUrl = file => `data:image/jpeg;base64,${fs.readFileSync(file).toString('base64')}`
-const thumb = file => `data:image/jpeg;base64,${execFileSync('magick', [file, '-resize', '320x320>', '-strip', '-quality', '70', 'jpg:-']).toString('base64')}`
+const thumb = (file, size = 320) => `data:image/jpeg;base64,${execFileSync('magick', [file, '-resize', `${size}x${size}>`, '-strip', '-quality', '70', 'jpg:-']).toString('base64')}`
 
 fs.mkdirSync(out, {recursive: true})
 const index = []
@@ -36,7 +36,8 @@ for (const dir of fs.readdirSync(src).sort()) {
   // File names don't reveal titles: HMAC of the book id under the library key.
   const name = b64url(await subtle.sign('HMAC', hmacKey, new TextEncoder().encode(book.id))).slice(0, 16) + '.bin'
   fs.writeFileSync(path.join(out, name), await seal({...book, pages}))
-  index.push({id: book.id, file: name, title: book.title, author: book.author, cover: pages[0].thumb, pages: pages.length})
+  index.push({id: book.id, file: name, title: book.title, author: book.author, tags: book.tags || [],
+    cover: thumb(path.join(src, dir, book.pages[0].img), 240), pages: pages.length})
   console.log(`${book.title}: ${pages.length} pages -> ${name}`)
 }
 fs.writeFileSync(path.join(out, 'index.bin'), await seal({books: index}))
