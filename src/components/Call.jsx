@@ -5,7 +5,7 @@ import {useEffect, useLayoutEffect, useRef, useState} from 'react'
 import {Library} from './Library.jsx'
 import {SpeakerText} from './SpeakerText.jsx'
 import {useCall, useWakeLock} from '../lib/call.js'
-import {openBook as fetchBook, pageLabel, useLibrary} from '../lib/library.js'
+import {entriesById, openBook as fetchBook, pageLabel, useLibrary} from '../lib/library.js'
 import {go} from '../lib/links.js'
 import {SETUP, read, rememberBook} from '../lib/store.js'
 
@@ -149,8 +149,11 @@ function ReaderBook({params, call, handlers}) {
   const [error, setError] = useState('')
   const [shelfOpen, setShelfOpen] = useState(false)
   const opened = useRef(false)
+  const byId = entriesById(books)
+  const entry = book && byId.get(book.id)
+  const nextStory = entry?.next && byId.get(entry.next)
 
-  const current = book && !shelfOpen ? {id: book.id, title: book.title, page: pageNo, label: pageLabel(book, pageNo)} : null
+  const current = book && !shelfOpen ? {id: book.id, title: book.collection ? `${book.collection.title}: ${book.title}` : book.title, page: pageNo, label: pageLabel(book, pageNo)} : null
   const currentRef = useRef(current)
   currentRef.current = current
 
@@ -174,8 +177,8 @@ function ReaderBook({params, call, handlers}) {
   useEffect(() => {
     if (!books || opened.current) return
     opened.current = true
-    const first = books.find(b => b.id === stack[0]) || (books.length === 1 && books[0])
-    if (first) openBook(first); else setShelfOpen(true)
+    const first = byId.get(stack[0]) || (books.length === 1 && !books[0].collection && books[0])
+    if (first && !first.collection) openBook(first); else setShelfOpen(true)
   }, [books])
 
   // Tell the phone what is open whenever it changes, and the phone that just joined.
@@ -185,8 +188,8 @@ function ReaderBook({params, call, handlers}) {
     const w = msg?.want
     if (!w) return
     if (book && w.id === book.id) return goTo(w.page ?? pageNo)
-    const entry = books?.find(b => b.id === w.id)
-    if (entry) openBook(entry, w.page ?? 0)
+    const target = byId.get(w.id)
+    if (target && !target.collection) openBook(target, w.page ?? 0)
   }
 
   useEffect(() => {
@@ -198,22 +201,25 @@ function ReaderBook({params, call, handlers}) {
     return () => removeEventListener('keydown', onKey)
   })
 
-  const title = loading ? `${loading}…` : shelfOpen || !book ? 'Pick a book' : book.title
+  const title = loading ? `${loading}…` : shelfOpen || !book ? 'Pick a book'
+    : book.collection ? `${book.collection.title} · ${book.title}` : book.title
   return (
     <div id="book">
       <div id="bookHead">
         <div id="bookTitle">{title}</div>
-        <button id="shelfBtn" className="ghost" onClick={() => setShelfOpen(true)}>All books</button>
+        <button id="shelfBtn" className="ghost" onClick={() => setShelfOpen(true)}>{book?.collection && !shelfOpen ? 'Contents' : 'All books'}</button>
       </div>
       {(error || listError || !books) && <div id="shelfMsg">{error || (listError ? `Couldn't open the books (${listError}).` : 'Loading books…')}</div>}
-      {shelfOpen && books && <Library id="shelf" books={books} stack={stack} current={book?.id} onPick={b => { setError(''); openBook(b) }} />}
-      {!shelfOpen && book && <Page book={book} pageNo={pageNo} goTo={goTo} />}
+      {shelfOpen && books && <Library id="shelf" books={books} stack={stack} current={book?.id}
+        openCollection={book?.collection?.id} onPick={b => { setError(''); openBook(b) }} />}
+      {!shelfOpen && book && <Page book={book} pageNo={pageNo} goTo={goTo}
+        nextStory={nextStory} onNextStory={() => openBook(nextStory)} />}
     </div>
   )
 }
 
 const MIN_TEXT = 22
-function Page({book, pageNo, goTo}) {
+export function Page({book, pageNo, goTo, nextStory, onNextStory}) {
   const page = book.pages[pageNo]
   const readerRef = useRef(), textRef = useRef(), wrapRef = useRef(), stripRef = useRef()
 
@@ -263,6 +269,8 @@ function Page({book, pageNo, goTo}) {
         <div id="pageText" ref={textRef} onScroll={moreCue}><SpeakerText text={page.text} voices={book.voices} /></div>
         <div id="moreCue">more ↓</div>
       </div>
+      {nextStory && pageNo === book.pages.length - 1 &&
+        <button id="nextStory" className="ghost" onClick={onNextStory}>Next story: {nextStory.storyTitle} ▶</button>}
       <div id="nav">
         <button id="prevBtn" className="ghost" aria-label="Previous page" disabled={pageNo === 0} onClick={() => goTo(pageNo - 1)}>◀</button>
         <div id="pageNum">{pageLabel(book, pageNo)}</div>

@@ -3,6 +3,7 @@ app.css.map
 app.js
 app.js.map
 books-test/
+chunks/
 .env
 node_modules/
 tests/out/

@@ -1,6 +1,7 @@
 // The parent's phone before a call: who's reading, tonight's books, start (or get back to) a call, settings.
 import {useState} from 'react'
 import {Library} from './Library.jsx'
+import {Viewer} from './Viewer.jsx'
 import {useLibrary} from '../lib/library.js'
 import {go, linkWith, randomId, shareLink} from '../lib/links.js'
 import {LAST_CALLS, RECENT, SETUP, homeLinkParams, setupParams, update, useStored, write} from '../lib/store.js'
@@ -10,6 +11,8 @@ export function Home() {
   const [invite, setInvite] = useState(null)
   const [picked, setPicked] = useState([])
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [browsing, setBrowsing] = useState(false)
+  const [viewing, setViewing] = useState(null)
   const reader = setup?.current || ''
   const {books, error} = useLibrary(setup?.lk, setup?.lib)
 
@@ -43,7 +46,20 @@ export function Home() {
         <button id="startBtn" onClick={startCall}>Start a call</button>
         <LastCall reader={reader} child={setup?.child} />
         {!setup?.lk && <p id="keyHint" className="small">Have a Storytime home link? Open it once on this device to add your own books.</p>}
-        <button id="settingsBtn" className="ghost small" onClick={() => setSettingsOpen(true)}>Settings</button>
+        <div className="row">
+          <button id="viewBtn" className="ghost small" onClick={() => setBrowsing(true)}>Look at the books</button>
+          <button id="settingsBtn" className="ghost small" onClick={() => setSettingsOpen(true)}>Settings</button>
+        </div>
+        {browsing && books && (
+          <div id="browse" className="overlay on" onClick={e => e.target === e.currentTarget && setBrowsing(false)}>
+            <div id="pickerSheet">
+              <h2>Look at a book</h2>
+              <Library id="browseShelf" books={books} onPick={e => setViewing(e)} />
+              <button id="browseClose" className="ghost" onClick={() => setBrowsing(false)}>Close</button>
+            </div>
+          </div>
+        )}
+        {viewing && <Viewer entry={viewing} books={books} lk={setup?.lk} lib={setup?.lib} onClose={() => setViewing(null)} />}
         {settingsOpen && <Settings setup={setup || {}} onClose={() => setSettingsOpen(false)} />}
       </>
     </section>

@@ -5,8 +5,9 @@ const lib = process.env.STORYTIME_LIB ? `&lib=${process.env.STORYTIME_LIB}` : ''
 const child = await page(390, 844, true), reader = await page(1180, 820)
 await child.goto(`${URL_}#lk=${LK}${lib}&reader=Grandma&child=Cleo`)
 await child.waitForSelector('#startShelf button')
-const titles = await child.locator('#startShelf .mini-shelf').last().locator('button').allTextContents()
-check(titles.length >= 2, `start screen lists ${titles.length} books`)
+// Plain books only (a collection card opens its contents instead of being picked; tests/collections.mjs covers those).
+const titles = await child.locator('#startShelf .mini-shelf').last().locator('button:not(:has(.storyCount))').allTextContents()
+check(titles.length >= 2, `start screen lists ${titles.length} plain books`)
 const [first, second] = titles
 await child.locator('#startShelf button', {hasText: second}).last().click()
 await child.locator('#startShelf button', {hasText: first}).last().click()

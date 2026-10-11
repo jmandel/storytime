@@ -53,3 +53,16 @@ export function useLibrary(lk, lib) {
 }
 
 export const pageLabel = (book, i) => book.pages[i]?.label || `Page ${i}`
+
+// Every openable entry by id: plain books, and each story of a collection as its own entry (id "<collection>/<story>",
+// titled "Collection: Story", with the collection's cover and a link back to the collection).
+export function entriesById(books) {
+  const map = new Map()
+  for (const b of books || []) {
+    if (!b.collection) { map.set(b.id, b); continue }
+    map.set(b.id, b)
+    b.stories.forEach((s, i) => map.set(s.id, {...s, title: `${b.title}: ${s.title}`, storyTitle: s.title,
+      cover: b.cover, author: b.author, tags: b.tags, parent: b, next: b.stories[i + 1]?.id}))
+  }
+  return map
+}

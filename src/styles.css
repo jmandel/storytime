@@ -47,8 +47,6 @@ p { margin:0; color:var(--muted); max-width:28em; }
   pointer-events:none; z-index:1; }
 #textWrap.more::after, #textWrap.more #moreCue { opacity:1; }
 .said { font-weight:500; }
-.who { font-size:.42em; font-weight:700; letter-spacing:.04em; text-transform:uppercase; vertical-align:super;
-  margin-right:.3em; opacity:.85; }
 #pageNote { color:var(--accent); text-align:center; font-size:.9em; margin-top:8px; }
 #pageText { flex:1; overflow:auto; padding:12px 20px; line-height:1.35;
   white-space:pre-line; }
@@ -136,3 +134,17 @@ button.danger { color:var(--warn); }
   background:#3a3752; color:var(--fg); width:9em; }
 #pickerSheet .library { max-width:none; }
 p.small { font-size:.8em; }
+.named { font-weight:500; }
+.storyCount { display:block; font-size:.85em; color:var(--muted); }
+.stories .back { margin:.6em 0 .2em; }
+.storyList { display:flex; flex-direction:column; gap:.4em; }
+.storyList button { position:relative; display:flex; justify-content:space-between; align-items:baseline; gap:1em; text-align:left;
+  background:rgba(255,255,255,.08); color:var(--fg); border-radius:12px; padding:.7em 1em; border:3px solid transparent; font-weight:500; }
+.storyList button.cur { border-color:var(--accent); }
+.storyPages { color:var(--muted); font-size:.8em; white-space:nowrap; }
+.storyList .pickNum { top:-.5em; right:-.5em; }
+#nextStory { margin:0 14px 4px; }
+#viewer { padding:0; background:var(--bg); }
+#book.viewer { position:absolute; inset:0; padding-top:env(safe-area-inset-top); padding-bottom:env(safe-area-inset-bottom); }
+#book.viewer #pageImg { max-height:48vh; }
+#bookHead #downloadBtn, #bookHead #viewerClose { white-space:nowrap; }

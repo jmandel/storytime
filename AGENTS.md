@@ -51,6 +51,9 @@ Everything after `#` stays in the browser; GitHub never sees it.
 
 Start screen settings (`lk`, names, `relay`, `turn`, `lib`) are copied into every call link.
 
+The start screen's "Look at the books" opens any book (or story) in a full-screen viewer, with "Download PDF" (one
+page per book page: the picture and its words; jsPDF is loaded only then).
+
 The parent's phone saves those settings in localStorage the first time the home link is opened, so afterwards the
 bare site address is enough (the key is not put back into the address bar). The start screen shows "Who's
 reading?" with a button per reader (the one called last is preselected; **+** adds one). Per reader it saves the
@@ -112,6 +115,34 @@ reader's tablet saves only recent books.
   barcodes, publisher addresses, review quotes.
 - When a word is unreadable in the photo, ask for a better photo of that page instead of guessing.
 
+### Collections (compendiums scanned a story at a time)
+
+A big book of separate stories (a Frog and Toad treasury, a Boynton collection) is a **collection**: one card on the
+shelf, opening to its contents, with each story packed as its own file so the book can grow one scan at a time.
+
+    $STORYTIME_BOOKS/frog-and-toad/
+      collection.json        {"id", "title", "author", "tags", "voices", "public"?}  (voices shared by every story)
+      cover.jpg              optional: the book's front cover (otherwise the first story's first page is used)
+      ice-cream/             one folder per story
+        book.json            {"id": "ice-cream", "title": "Ice Cream", "pages": [...], "voices"?, "start"?}
+        page-00.jpg ...
+
+- A story's pages are labelled with the printed page numbers (`"label": "Page 158"`); stories are listed in order of
+  their first printed page (or `"start"`), so they slot into place whatever order they are scanned in.
+- The first page of a story is usually its title page: keep the story title as the first line of its text.
+- A page with only a picture gets `"text": ""` and `"note": "Picture page: no words"`.
+- In the app a story's id is `<collection>/<story>`; it can be in tonight's stack, recent books and the pickers like
+  any book, and its last page offers "Next story" in the collection.
+
+**When a new scan arrives, check whether it belongs to a collection already in the library** before making a new
+book. Signs: printed page numbers in the middle of a book (e.g. 158-169) instead of a cover; a story-title page;
+the same characters, author, typeface, page borders or running heads as an existing collection's pages (look at a
+page image from it). If it matches, say so and offer to add it ("This looks like another story from your Frog and
+Toad book (pages 170-181) - add it there?"), then put it in a new story folder of that collection. If a scan of a
+standalone book looks like it belongs with another standalone book from the same compendium, offer to turn them
+into a collection. If you can't tell which book a story comes from, ask, and ask for a photo of the book's cover
+for `cover.jpg` when the collection doesn't have one.
+
 ### Marking who is talking
 
 Wrap dialogue in `[Speaker: ...]`; narration stays plain:
@@ -126,7 +157,9 @@ Wrap dialogue in `[Speaker: ...]`; narration stays plain:
 - Don't tag a speaker the text doesn't make clear; leave it plain.
 - `[` and `]` are reserved for tags; if a book prints square brackets, use parentheses.
 
-The reader's tablet shows each speaker in their color with a small name label when the speaker changes.
+The reader's tablet shows each speaker's words in their color, and the speaker's name where the narration mentions
+it ("said Frog", "cried a squirrel") in the same color. Put every speaker in `voices` (or the collection's
+`voices`) so a name that only appears in narration on some page still gets its color.
 
 ### Long pages (chapter books)
 
@@ -159,7 +192,7 @@ Codex CLI notes: put `-i <images>` **after** the prompt (otherwise the prompt is
 
 ## Building
 
-`npm run build` writes `app.js` and `app.css` (minified, production React); `npm run dev` rebuilds on every change.
+`npm run build` writes `app.js`, `app.css` and lazily loaded `chunks/` (minified, production React); `npm run dev` rebuilds on every change.
 State lives in React (saved setup through `src/lib/store.js`'s `useStored`, so a change re-renders every screen that
 uses it); screens switch by changing the hash, never by reloading the page. Keep element ids stable: the tests use
 them.
@@ -169,9 +202,9 @@ them.
 Build, serve the folder locally and run the tests (Chromium with a fake camera; they use the public Nostr relays):
 
     npm run serve &                             # python3 -m http.server 8092 --bind 127.0.0.1
-    npm test                                    # tests/call.mjs (connect, wrong secret refused), tests/books.mjs
-                                                # (stack, book switching, page turns both ways), tests/setup.mjs
-                                                # (saved setup, last call, settings, forget)
+    npm test                                    # call (connect, wrong secret refused), books (stack, switching,
+                                                # page turns both ways), setup (saved setup, readers, last call,
+                                                # settings, forget), public (no key), collections, viewer (+ PDF)
     STORYTIME_LIB=books-test/ node tests/books.mjs   # same with a big test library, if you made one
     node tests/screens.mjs                      # screenshots of every screen at six sizes -> tests/out/
 
@@ -185,7 +218,7 @@ with the same key: `node tools/pack-books.mjs <folder> books-test`.
 ## Deploying
 
 Pushing to `main` runs `.github/workflows/pages.yml`: `npm ci`, `npm run build`, then publishes `index.html`,
-`preview.html`, `app.js`, `app.css` and `books/` to GitHub Pages. Commit `books/` together with any app change that
+`preview.html`, `app.js`, `app.css`, `chunks/` and `books/` to GitHub Pages. Commit `books/` together with any app change that
 needs it, run the tests, then push. Check before pushing that no book sources, page images,
 `.env` or key values are in the commit (`git show --stat`; `git grep` for the key).
 
