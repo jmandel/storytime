@@ -17,7 +17,7 @@ await child.click('#goBtn'); await child.waitForSelector('#joinBtn'); await chil
 await reader.goto(link); await reader.click('#joinBtn'); await reader.waitForSelector('#strip img')
 check((await reader.textContent('#bookTitle')) === second, `reader opens the first book of the stack (${second})`)
 const badge = () => child.textContent('#pageBadge')
-await child.waitForFunction(() => document.getElementById('pageBadge').style.display === 'block', null, {timeout: 45000}).catch(() => {})
+await child.waitForFunction(() => document.getElementById('pageBadge'), null, {timeout: 45000}).catch(() => {})
 check((await badge()).includes(second), `phone shows the reader's book: ${await badge()}`)
 await child.click('#childNext'); await reader.waitForTimeout(1200)
 check((await reader.textContent('#pageNum')) !== 'Cover' || (await badge()).includes('Page 1'), `phone turns the page: ${await reader.textContent('#pageNum')}`)

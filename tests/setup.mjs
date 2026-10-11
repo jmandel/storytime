@@ -2,8 +2,7 @@
 // "Forget this device" clears everything.
 import {browser, page, check, URL_, LK} from './lib.mjs'
 const phone = await page(390, 844, true)
-let promptAnswer = ''
-phone.on('dialog', d => d.type() === 'prompt' ? d.accept(promptAnswer) : d.accept())
+phone.on('dialog', d => d.accept())
 const startText = () => phone.textContent('#startText')
 const chips = () => phone.locator('#readers .chip:not(.add)').allTextContents()
 const fresh = async () => { await phone.goto(URL_); await phone.reload(); await phone.waitForSelector('#startShelf button', {timeout: 10000}).catch(() => {}) }
@@ -16,8 +15,10 @@ check(!(await phone.evaluate(() => location.hash)).includes('lk='), 'key is not 
 check(JSON.stringify(await chips()) === '["Gramma","Grammie"]', `readers from the home link: ${await chips()}`)
 check((await startText()).includes('Gramma.'), `first reader preselected: "${await startText()}"`)
 
+await phone.evaluate(() => { window.noReload = true })
 await phone.locator('#readers .chip', {hasText: 'Grammie'}).click(); await phone.waitForSelector('#startShelf button')
 check((await startText()).includes('Grammie'), `picking a reader: "${await startText()}"`)
+check(await phone.evaluate(() => window.noReload === true), 'switching readers updates in place (no page reload)')
 await phone.click('#startBtn')
 const link = new URLSearchParams((await phone.textContent('#linkbox')).split('#')[1])
 check(link.get('lk') === LK && link.get('reader') === 'Grammie' && link.get('child') === 'Cleo', 'call link carries the key and only the chosen reader')
@@ -32,8 +33,8 @@ await phone.click('#lastBackBtn'); await phone.waitForSelector('#joinBtn')
 check((await phone.evaluate(() => location.hash)).includes('reader=Grammie'), "back to the call opens Grammie's call")
 
 await fresh()
-promptAnswer = 'Nana'
-await phone.click('#readers .chip.add'); await phone.waitForSelector('#startShelf button')
+await phone.click('#readers .chip.add'); await phone.fill('#newReader', 'Nana'); await phone.press('#newReader', 'Enter')
+await phone.waitForSelector('#readers .chip.add')
 check(JSON.stringify(await chips()) === '["Gramma","Grammie","Nana"]' && (await startText()).includes('Nana'), `adding a reader: ${await chips()}`)
 await phone.click('#settingsBtn'); await phone.fill('#set_readers', 'Gramma\nNana'); await phone.click('#settingsSave')
 await phone.waitForSelector('#startShelf button')

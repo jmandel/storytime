@@ -8,7 +8,12 @@ video plus the current page's words in big type. It is a static site (GitHub Pag
 
 | Path | What it is |
 |---|---|
-| `index.html`, `app.js` | the whole app: start screen, call, reader's book panel, child's book picker |
+| `src/` | the app, React 18 (built with esbuild into `app.js` + `app.css`, which are gitignored) |
+| `src/components/Home.jsx` | parent's phone before a call: who's reading, tonight's books, last call, settings, invite |
+| `src/components/Call.jsx` | join screen, video stage, the reader's book panel (`ReaderBook`, `Page`), the phone's book controls |
+| `src/components/Library.jsx` | book browsing (tonight, recent, all, search) used in all three places |
+| `src/lib/` | `call.js` (Trystero room, retries), `library.js` (encrypted books), `store.js` (saved setup), `links.js` |
+| `index.html` | the page shell |
 | `preview.html` | both sides side by side in one window, for looking at changes |
 | `vendor/trystero-nostr.js` | Trystero 0.25.4 (Nostr strategy) bundled from `vendor-entry.js` |
 | `books/` | the encrypted library: `index.bin` (book list with small covers) and one `<hash>.bin` per book |
@@ -148,9 +153,16 @@ Work in `$STORYTIME_BOOKS/<book-id>/work/`.
 Codex CLI notes: put `-i <images>` **after** the prompt (otherwise the prompt is taken as an image name), run with
 `< /dev/null`, and run long batches in the background.
 
+## Building
+
+`npm run build` writes `app.js` and `app.css` (minified, production React); `npm run dev` rebuilds on every change.
+State lives in React (saved setup through `src/lib/store.js`'s `useStored`, so a change re-renders every screen that
+uses it); screens switch by changing the hash, never by reloading the page. Keep element ids stable: the tests use
+them.
+
 ## Testing
 
-Serve the folder locally and run the tests (Chromium with a fake camera; they use the public Nostr relays):
+Build, serve the folder locally and run the tests (Chromium with a fake camera; they use the public Nostr relays):
 
     npm run serve &                             # python3 -m http.server 8092 --bind 127.0.0.1
     npm test                                    # tests/call.mjs (connect, wrong secret refused), tests/books.mjs
@@ -168,8 +180,9 @@ with the same key: `node tools/pack-books.mjs <folder> books-test`.
 
 ## Deploying
 
-The site is plain files, published by GitHub Pages from the default branch. Commit `books/` together with any app
-change that needs it, run the tests, then push. Check before pushing that no book sources, page images,
+Pushing to `main` runs `.github/workflows/pages.yml`: `npm ci`, `npm run build`, then publishes `index.html`,
+`preview.html`, `app.js`, `app.css` and `books/` to GitHub Pages. Commit `books/` together with any app change that
+needs it, run the tests, then push. Check before pushing that no book sources, page images,
 `.env` or key values are in the commit (`git show --stat`; `git grep` for the key).
 
 ## Keys

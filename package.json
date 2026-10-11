@@ -7,7 +7,9 @@
     "serve": "python3 -m http.server 8092 --bind 127.0.0.1",
     "test": "node tests/call.mjs && node tests/books.mjs && node tests/setup.mjs",
     "screens": "node tests/screens.mjs",
-    "pack": "node tools/pack-books.mjs"
+    "pack": "node tools/pack-books.mjs",
+    "build": "esbuild src/main.jsx --bundle --format=esm --minify --sourcemap --jsx=automatic --loader:.js=jsx --define:process.env.NODE_ENV=\\\"production\\\" --outfile=app.js",
+    "dev": "esbuild src/main.jsx --bundle --format=esm --sourcemap --jsx=automatic --loader:.js=jsx --outfile=app.js --watch"
   },
   "keywords": [],
   "author": "",
@@ -15,7 +17,9 @@
   "type": "commonjs",
   "dependencies": {
     "@trystero-p2p/nostr": "0.25.4",
-    "esbuild": "0.25.10"
+    "esbuild": "0.25.10",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   },
   "devDependencies": {
     "playwright-core": "1.55.0"
