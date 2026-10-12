@@ -3,16 +3,14 @@ import {useEffect, useState} from 'react'
 import {guardHome, useBackLayer} from '../lib/guard.js'
 import {Library} from './Library.jsx'
 import {useLibrary} from '../lib/library.js'
-import {go, goReplace, linkWith, randomId, shareLink} from '../lib/links.js'
+import {go, linkWith, randomId, shareLink} from '../lib/links.js'
 import {LAST_CALLS, RECENT, SETUP, homeLinkParams, setupParams, update, useStored, write} from '../lib/store.js'
 
 export function Home() {
   const setup = useStored(SETUP)
-  const [invite, setInvite] = useState(null)
   const [picked, setPicked] = useState([])
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [browsing, setBrowsing] = useState(false)
-  useBackLayer(!!invite, () => setInvite(null))
   useBackLayer(settingsOpen, () => setSettingsOpen(false))
   useBackLayer(browsing, () => setBrowsing(false))
   const reader = setup?.current || ''
@@ -31,17 +29,16 @@ export function Home() {
       links[role] = q
     }
     update(LAST_CALLS, all => ({...all, [reader]: {child: linkWith(links.child), reader: linkWith(links.reader), at: Date.now()}}))
-    setInvite({readerLink: linkWith(links.reader), childParams: links.child})
+    // Straight into the call; sending the link happens there, so this phone is already waiting when it's opened.
+    go(links.child)
   }
-
-  if (invite) return <Invite reader={reader} child={setup?.child} {...invite} />
 
   return (
     <section id="start" className="screen on center">
       <h1>Storytime</h1>
       <>
         <Readers setup={setup || {}} />
-        <p id="startText">Start a call here, then send the link to {reader || 'the reader'}.</p>
+        <p id="startText">Start a call, then send {reader || 'the reader'} the link from the call screen.</p>
         {error && <p className="warn">Couldn't open the books ({error}).</p>}
         <p id="startHint">{picked.length ? `${picked.length} book${picked.length > 1 ? 's' : ''} for tonight` : 'Tap books for tonight (optional)'}</p>
         {books && <Library id="startShelf" books={books} picked={picked}
@@ -116,21 +113,6 @@ function LastCall({reader, child}) {
         <button id="lastSendBtn" className="ghost" onClick={() => shareLink(last.reader, child ? `Storytime with ${child}` : 'Storytime')}>Send link again</button>
       </div>
     </div>
-  )
-}
-
-function Invite({reader, child, readerLink, childParams}) {
-  const [copied, setCopied] = useState(false)
-  return (
-    <section id="invite" className="screen on center">
-      <h1 id="inviteTitle">Send this to {reader || 'the reader'}</h1>
-      {navigator.share && <button id="shareBtn" onClick={() => shareLink(readerLink, child ? `Storytime with ${child}` : 'Storytime')}>Share link</button>}
-      <button id="copyBtn" className="ghost" onClick={() => navigator.clipboard.writeText(readerLink).then(() => setCopied(true))}>
-        {copied ? 'Copied' : 'Copy link'}
-      </button>
-      <div id="linkbox">{readerLink}</div>
-      <button id="goBtn" className="ghost" onClick={() => goReplace(childParams)}>Open the call</button>
-    </section>
   )
 }
 

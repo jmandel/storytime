@@ -9,8 +9,8 @@ video plus the current page's words in big type. It is a static site (GitHub Pag
 | Path | What it is |
 |---|---|
 | `src/` | the app, React 18 (built with esbuild into `app.js` + `app.css`, which are gitignored) |
-| `src/components/Home.jsx` | parent's phone before a call: who's reading, tonight's books, last call, settings, invite |
-| `src/components/Call.jsx` | join screen, video stage, the reader's book panel (`ReaderBook`, `Page`), the phone's book controls |
+| `src/components/Home.jsx` | parent's phone before a call: who's reading, tonight's books, last call, settings |
+| `src/components/Call.jsx` | join screen, video stage (with the reader's link to send while waiting), the reader's book panel (`ReaderBook`, `Page`), the phone's book controls |
 | `src/components/Library.jsx` | book browsing (tonight, recent, all, search) used in all three places |
 | `src/lib/` | `call.js` (Trystero room, retries), `library.js` (encrypted books), `store.js` (saved setup), `links.js` |
 | `index.html` | the page shell |
@@ -55,7 +55,26 @@ The start screen's "Look at the books" opens any book (or story) in a new tab at
 without a call, with "Download PDF" (one page per book page: the picture and its words; jsPDF is loaded only then).
 `#view=` links can be bookmarked; they use the library key saved on the device.
 
-Back moves around inside the app: screens drawn on top without changing the address (the invite, Settings, the
+How a call starts: "Start a call" on the parent's phone goes straight into the call (no Join tap: the page has
+already been tapped, so sound can play), and the waiting screen there offers "Send <reader> the link" / "Copy link",
+so the phone is already in the call when the reader opens it. The reader's freshly opened link needs one Join tap.
+
+Who is on which side (`src/lib/call.js`): every screen says hello every 4 s with its side (`as`), when it joined,
+whether it is in the foreground and whether our video is reaching it. Each screen shows the other side's screen
+(still saying hello, video arriving, foreground, longest in the call) and never a second copy of its own side.
+- The phone that started a call opening the reader's link (e.g. tapping it in the message it was sent in) is sent
+  to its own side (it finds the call in its saved last calls).
+- A second screen on the same side: a background copy steps aside for a foreground one; otherwise the newer one
+  shows "already using this link" with "Open <child>'s side" / "I'm <reader>: use this screen". A screen that stepped
+  aside shows "The call moved to another screen" with "Use this screen".
+- Cameras are sent one way at a time (lower peer id first, the other when that video arrives), because two
+  simultaneous renegotiations can collide and lose one direction (this caused one-way calls).
+- If the other side keeps reporting our video isn't arriving, or a peer's video never arrives, the page reloads and
+  rejoins as a new participant (rejoining in place keeps the peer id and can leave a dead connection); at most 4
+  restarts in 3 minutes. If the browser then blocks sound, a "Tap to see and hear" button appears.
+`tests/sides.mjs` covers these.
+
+Back moves around inside the app: screens drawn on top without changing the address (Settings, the
 book list, a collection's contents, the in-call picker and shelf) each register with `useBackLayer(open, close)`,
 so Back closes the top one. Any new overlay or sub-screen must do the same. Back is guarded (`src/lib/guard.js`): on the start screen Back asks "Leave Storytime?" (an extra history entry
 sits on top), and during a call Back asks "Leave the call?" (entries the app has been on are stamped in

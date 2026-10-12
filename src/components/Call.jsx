@@ -4,17 +4,31 @@
 import {useEffect, useLayoutEffect, useRef, useState} from 'react'
 import {Library} from './Library.jsx'
 import {SpeakerText} from './SpeakerText.jsx'
-import {useCall, useWakeLock} from '../lib/call.js'
+import {claimCall, restartPending, useCall, useWakeLock} from '../lib/call.js'
 import {entriesById, openBook as fetchBook, pageLabel, useLibrary} from '../lib/library.js'
-import {goReplace} from '../lib/links.js'
+import {goReplace, linkWith, shareLink} from '../lib/links.js'
 import {leaveCallOnPurpose, useBackLayer} from '../lib/guard.js'
-import {SETUP, read, rememberBook} from '../lib/store.js'
+import {LAST_CALLS, SETUP, read, rememberBook} from '../lib/store.js'
+
+// The same call's link for the other side.
+const otherSide = params => {
+  const p = new URLSearchParams(params)
+  p.set('as', params.get('as') === 'reader' ? 'child' : 'reader')
+  p.delete('preview')
+  return p
+}
 
 export function CallRoute({params}) {
   const [stream, setStream] = useState(null)
   const [error, setError] = useState('')
+  const [restart] = useState(() => restartPending(params))
   const isReader = params.get('as') === 'reader'
   const withName = isReader ? params.get('child') : params.get('reader')
+  // This device started the call, so the reader's link was opened here by mistake (e.g. from the message it was
+  // sent in): go to this device's own side instead.
+  const ownSide = isReader && Object.values(read(LAST_CALLS) || {}).find(c => {
+    try { return new URL(c.child).hash.includes(`r=${params.get('r')}&`) } catch { return false }
+  })
 
   const join = async () => {
     setError('')
@@ -27,35 +41,48 @@ export function CallRoute({params}) {
       setError(`Camera or microphone not available: ${e.message}`)
     }
   }
-  useEffect(() => { if (params.get('preview') === '1') join() }, [])
+  useEffect(() => {
+    if (ownSide) return goReplace(new URL(ownSide.child).hash.slice(1))
+    // Straight in when this page has already been tapped (the parent pressed Start a call, so sound can play);
+    // a freshly opened link needs one tap.
+    if (params.get('preview') === '1' || restart || navigator.userActivation?.hasBeenActive) join()
+  }, [])
   useEffect(() => () => stream?.getTracks().forEach(t => t.stop()), [stream])
 
-  if (stream) return <Call params={params} stream={stream} />
+  if (ownSide) return null
+  if (stream) return <Call params={params} stream={stream} claim={!!restart?.claim} onRejoin={() => claimCall(params)} />
   return (
     <section id="join" className="screen on center">
       <h1 id="joinTitle">{withName ? `Storytime with ${withName}` : 'Storytime'}</h1>
-      <p>Tap to turn on the camera and join.</p>
-      <button id="joinBtn" onClick={join}>Join</button>
+      <button id="joinBtn" className="big" onClick={join}>Join</button>
+      <p className="small">This turns on the camera and microphone.</p>
       {error && <p id="joinErr" className="warn">{error}</p>}
     </section>
   )
 }
 
-function Video({stream, ...props}) {
+// onBlocked: the browser refused to start playback (sound needs a tap first, e.g. after a reconnect reloaded the page).
+function Video({stream, onBlocked, ...props}) {
   const ref = useRef()
-  useEffect(() => { if (ref.current) ref.current.srcObject = stream }, [stream])
+  useEffect(() => {
+    const v = ref.current
+    if (!v) return
+    v.srcObject = stream
+    if (stream) v.play?.()?.catch(e => e.name === 'NotAllowedError' && onBlocked?.())
+  }, [stream])
   return <video ref={ref} autoPlay playsInline {...props} />
 }
 
-function Call({params, stream}) {
+function Call({params, stream, claim, onRejoin}) {
   const isReader = params.get('as') === 'reader'
   const reader = params.get('reader') || 'the reader', child = params.get('child') || 'the child'
   const handlers = useRef({})
   const call = useCall(params, stream, {
     onPeerJoin: id => handlers.current.onPeerJoin?.(id),
     onMessage: msg => handlers.current.onMessage?.(msg),
-  })
+  }, {claim})
   const [muted, setMuted] = useState(false)
+  const [blocked, setBlocked] = useState(false)
   useWakeLock()
 
   const toggleMute = () => {
@@ -71,11 +98,38 @@ function Call({params, stream}) {
   })())
 
   const childSide = useChildBooks({params, call, handlers, reader, enabled: !isReader})
+  const mySide = isReader ? reader : `${child}'s phone`
+  if (call.replaced) return (
+    <section id="moved" className="screen on center">
+      <h1>The call moved to another screen</h1>
+      <p>{mySide[0].toUpperCase() + mySide.slice(1)} opened the call somewhere else, so this screen stepped aside.</p>
+      <button id="useHereBtn" className="big" onClick={onRejoin}>Use this screen</button>
+      <button className="ghost" onClick={leave}>Leave</button>
+    </section>
+  )
   return (
     <section id="call" className={`screen on${isReader ? ' reader' : ''}`}>
       <div id="stage">
-        <Video id="remote" stream={call.remote} muted={params.get('preview') === '1'} />
-        {!call.remote && <div id="waiting">Waiting for {isReader ? child : reader}…</div>}
+        <Video id="remote" stream={call.remote} muted={params.get('preview') === '1'} onBlocked={() => setBlocked(true)} />
+        {blocked && <button id="tapToPlay" className="big" onClick={() => { document.getElementById('remote').play().catch(() => {}); setBlocked(false) }}>
+          Tap to see and hear {isReader ? child : reader}</button>}
+        {!call.remote && <Waiting params={params} isReader={isReader} reader={reader} child={child} />}
+        {call.conflict && (
+          <div id="conflict" className="overlay on">
+            <div className="sheet">
+              {isReader ? <>
+                <h2>{reader[0].toUpperCase() + reader.slice(1)} is already using this link</h2>
+                <p>This link is for {reader}. If you started the call, open your own side instead.</p>
+                <button id="switchSideBtn" onClick={() => goReplace(otherSide(params))}>Open {child}'s side</button>
+                <button id="takeOverBtn" className="ghost" onClick={call.takeOver}>I'm {reader}: use this screen</button>
+              </> : <>
+                <h2>This call is already open on another screen</h2>
+                <button id="takeOverBtn" onClick={call.takeOver}>Use this screen</button>
+                <button className="ghost" onClick={leave}>Leave</button>
+              </>}
+            </div>
+          </div>
+        )}
         <Video id="self" stream={stream} muted />
         <div id="status" className={call.status.cls}>{call.status.text}</div>
         {childSide?.overlay}
@@ -88,6 +142,35 @@ function Call({params, stream}) {
       {isReader && <ReaderBook params={params} call={call} handlers={handlers} />}
       {childSide?.picker}
     </section>
+  )
+}
+
+// Before the other side arrives. The phone that started the call offers the reader's link right here, so sending it
+// never takes the phone out of the call; the reader's side says who it's waiting for, and after a while what to do.
+function Waiting({params, isReader, reader, child}) {
+  const [long, setLong] = useState(false)
+  const [copied, setCopied] = useState(false)
+  useEffect(() => { const t = setTimeout(() => setLong(true), 20000); return () => clearTimeout(t) }, [])
+  if (isReader) return (
+    <div id="waiting">
+      <p>Waiting for {child}…</p>
+      {long && <p className="small">Still waiting. The call starts when {child}'s phone opens it, so you may need to let them know you're here.</p>}
+    </div>
+  )
+  const link = linkWith(otherSide(params))
+  const title = params.get('child') ? `Storytime with ${params.get('child')}` : 'Storytime'
+  return (
+    <div id="waiting">
+      <p>Waiting for {reader}.</p>
+      <div className="row">
+        {navigator.share && <button id="shareBtn" onClick={() => shareLink(link, title)}>Send {reader} the link</button>}
+        <button id="copyBtn" className={navigator.share ? 'ghost' : ''} onClick={() => navigator.clipboard.writeText(link).then(() => setCopied(true))}>
+          {copied ? 'Copied' : 'Copy link'}
+        </button>
+      </div>
+      <div id="linkbox">{link}</div>
+      <p className="small">Stay on this screen; the call starts when {reader} opens the link.</p>
+    </div>
   )
 }
 

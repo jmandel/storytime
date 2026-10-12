@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "serve": "python3 -m http.server 8092 --bind 127.0.0.1",
-    "test": "for t in call books setup public collections viewer back; do node tests/$t.mjs || fail=1; done; exit ${fail:-0}",
+    "test": "for t in call books setup public collections viewer back sides; do node tests/$t.mjs || fail=1; done; exit ${fail:-0}",
     "screens": "node tests/screens.mjs",
     "pack": "node tools/pack-books.mjs",
     "build": "esbuild src/main.jsx --bundle --format=esm --splitting --minify --sourcemap --jsx=automatic --loader:.js=jsx --define:process.env.NODE_ENV=\\\"production\\\" --outdir=. --entry-names=app --chunk-names=chunks/[name]-[hash]",

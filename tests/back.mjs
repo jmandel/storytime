@@ -8,10 +8,6 @@ await p.goto('about:blank')
 await p.goto(`${URL_}#lk=${LK}&reader=Grandma&child=Cleo`)
 await p.waitForSelector('#startBtn')
 
-await p.click('#startBtn'); await p.waitForSelector('#inviteTitle')
-await back()
-check(asked.length === 0 && await p.isVisible('#startBtn'), `Back from "Send this to Grandma" returns to the start screen (${asked})`)
-
 await p.click('#settingsBtn'); await back()
 check(asked.length === 0 && !(await p.isVisible('#settings')) && await p.isVisible('#startBtn'), 'Back closes Settings')
 await p.click('#settingsBtn'); await p.click('#settingsClose'); await back()
@@ -23,8 +19,8 @@ check(asked.length === 0 && await p.locator('#startShelf .storyList').count() ==
 await p.click('#viewBtn'); await back()
 check(asked.length === 0 && !(await p.isVisible('#browse')), 'Back closes the book list')
 
-await p.click('#startBtn'); await p.click('#goBtn'); await p.waitForSelector('#joinBtn'); await p.click('#joinBtn')
-await p.waitForSelector('#leaveBtn')
+await p.click('#startBtn'); await p.waitForSelector('#leaveBtn')
+check(await p.isVisible('#shareBtn, #copyBtn'), 'Start a call goes straight into the call, with the link to send there')
 await p.click('#bookBtn').catch(() => {}); await p.waitForSelector('#picker', {timeout: 5000}).catch(() => {})
 await back()
 check(asked.length === 0 && !(await p.isVisible('#picker')) && await p.isVisible('#leaveBtn'), 'in a call, Back closes the book picker')
@@ -34,7 +30,7 @@ answer = true; await back()
 check(asked.includes('Leave the call?') && await p.isVisible('#startBtn'), 'confirming leaves the call for the start screen (not the site)')
 
 answer = false
-await p.click('#startBtn'); await p.click('#goBtn'); await p.waitForSelector('#joinBtn'); await p.click('#joinBtn')
+await p.click('#startBtn'); await p.waitForSelector('#leaveBtn')
 asked = []; await p.click('#leaveBtn'); await p.waitForSelector('#startBtn'); await p.waitForTimeout(300)
 check(asked.length === 0, 'the Leave button leaves without asking')
 
