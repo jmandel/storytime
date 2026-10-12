@@ -27,7 +27,7 @@ export function CallRoute({params}) {
   // This device started the call, so the reader's link was opened here by mistake (e.g. from the message it was
   // sent in): go to this device's own side instead.
   const ownSide = isReader && Object.values(read(LAST_CALLS) || {}).find(c => {
-    try { return new URL(c.child).hash.includes(`r=${params.get('r')}&`) } catch { return false }
+    try { return new URLSearchParams(new URL(c.child).hash.slice(1)).get('r') === params.get('r') } catch { return false }
   })
 
   const join = async () => {
@@ -56,10 +56,15 @@ export function CallRoute({params}) {
       <h1 id="joinTitle">{withName ? `Storytime with ${withName}` : 'Storytime'}</h1>
       <button id="joinBtn" className="big" onClick={join}>Join</button>
       <p className="small">This turns on the camera and microphone.</p>
+      {inAppBrowser && <p id="inAppHint" className="warn">If the call doesn't work here, open this link in {/iPhone|iPad/.test(navigator.userAgent) ? 'Safari' : 'Chrome'} instead (⋮ or share menu, then "Open in browser").</p>}
       {error && <p id="joinErr" className="warn">{error}</p>}
     </section>
   )
 }
+
+// A browser built into another app (Facebook, Instagram, Gmail's or Messenger's viewer, an Android WebView), where
+// cameras and calls often don't work.
+const inAppBrowser = /FBAN|FBAV|FB_IAB|Instagram|Line\/|GSA\/|; wv\)/.test(navigator.userAgent)
 
 // onBlocked: the browser refused to start playback (sound needs a tap first, e.g. after a reconnect reloaded the page).
 function Video({stream, onBlocked, ...props}) {
@@ -113,7 +118,7 @@ function Call({params, stream, claim, onRejoin}) {
         <Video id="remote" stream={call.remote} muted={params.get('preview') === '1'} onBlocked={() => setBlocked(true)} />
         {blocked && <button id="tapToPlay" className="big" onClick={() => { document.getElementById('remote').play().catch(() => {}); setBlocked(false) }}>
           Tap to see and hear {isReader ? child : reader}</button>}
-        {!call.remote && <Waiting params={params} isReader={isReader} reader={reader} child={child} />}
+        {!call.seeing && <Waiting params={params} isReader={isReader} reader={reader} child={child} onRetry={call.retry} />}
         {call.conflict && (
           <div id="conflict" className="overlay on">
             <div className="sheet">
@@ -147,14 +152,17 @@ function Call({params, stream, claim, onRejoin}) {
 
 // Before the other side arrives. The phone that started the call offers the reader's link right here, so sending it
 // never takes the phone out of the call; the reader's side says who it's waiting for, and after a while what to do.
-function Waiting({params, isReader, reader, child}) {
+// After a while both sides offer Try again (the screens also retry by themselves).
+function Waiting({params, isReader, reader, child, onRetry}) {
   const [long, setLong] = useState(false)
   const [copied, setCopied] = useState(false)
-  useEffect(() => { const t = setTimeout(() => setLong(true), 20000); return () => clearTimeout(t) }, [])
+  useEffect(() => { const t = setTimeout(() => setLong(true), 30000); return () => clearTimeout(t) }, [])
+  const retry = long && <button id="retryBtn" className="ghost" onClick={onRetry}>Try again</button>
   if (isReader) return (
     <div id="waiting">
       <p>Waiting for {child}…</p>
-      {long && <p className="small">Still waiting. The call starts when {child}'s phone opens it, so you may need to let them know you're here.</p>}
+      {long && <p className="small">Still waiting. The call starts when {child}'s phone opens it. If it's already open, tap Try again.</p>}
+      {retry}
     </div>
   )
   const link = linkWith(otherSide(params))
@@ -170,6 +178,7 @@ function Waiting({params, isReader, reader, child}) {
       </div>
       <div id="linkbox">{link}</div>
       <p className="small">Stay on this screen; the call starts when {reader} opens the link.</p>
+      {retry}
     </div>
   )
 }

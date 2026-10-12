@@ -69,10 +69,22 @@ whether it is in the foreground and whether our video is reaching it. Each scree
   aside shows "The call moved to another screen" with "Use this screen".
 - Cameras are sent one way at a time (lower peer id first, the other when that video arrives), because two
   simultaneous renegotiations can collide and lose one direction (this caused one-way calls).
-- If the other side keeps reporting our video isn't arriving, or a peer's video never arrives, the page reloads and
-  rejoins as a new participant (rejoining in place keeps the peer id and can leave a dead connection); at most 4
-  restarts in 3 minutes. If the browser then blocks sound, a "Tap to see and hear" button appears.
+- "Connected" (and hiding the waiting screen) means the other side's video is actually arriving, not just that a
+  connection exists.
 `tests/sides.mjs` covers these.
+
+Getting unstuck (`src/lib/call.js`, `tests/recover.mjs`): every attempt to join loads a fresh copy of
+`vendor/trystero-nostr.js` (`?copy=n`), so it gets new relay sockets and a new peer id, and the old copy is shut down
+(its connections closed, its relay sockets paused and closed). Rejoining with the old copy doesn't work: relay
+sockets can die without closing (a frozen background tab, e.g. while the phone sends the link from Messages), and the
+other side ignores new offers from a peer id it still thinks is connected. A screen joins again:
+- with the other side present but its video not arriving for 20 s, or the other side reporting 3 times that ours
+  isn't arriving;
+- with nobody from the other side there, every 45 s (they may be waiting behind dead relay sockets);
+- right away when it comes back from more than 10 s in the background, or the network comes back, without video;
+- when the waiting screen's "Try again" (after 30 s) is tapped.
+Never while in the background or while showing the "already using this link" prompt; at most every 8 s. Only a camera
+that stops for good reloads the page. A second copy of a side never makes the first one rejoin or reload.
 
 Back moves around inside the app: screens drawn on top without changing the address (Settings, the
 book list, a collection's contents, the in-call picker and shelf) each register with `useBackLayer(open, close)`,
@@ -295,7 +307,8 @@ needs it, run the tests, then push. Check before pushing that no book sources, p
 
 ## Relays and fallbacks
 
-Calls start through public Nostr relays (list in `app.js`; several are used at once and only one needs to work).
+Calls start through public Nostr relays (`DEFAULT_RELAYS` in `src/lib/call.js`; several are used at once and only one
+needs to work; a relay that refuses our messages, as offchain.pub started to, should be dropped).
 After that the video goes directly between the devices. To use our own relay, run a Nostr relay (or Trystero's
 `@trystero-p2p/ws-relay` server, which needs the matching strategy bundle) and add `relay=wss://...` to the home
 link. If two networks can't connect directly, add a TURN server with `turn=`.
@@ -305,4 +318,5 @@ link. If two networks can't connect directly, add a TURN server with `turn=`.
     npm i
     npx esbuild vendor-entry.js --bundle --format=esm --minify --outfile=vendor/trystero-nostr.js
 
-Pin exact versions in `package.json`; run the tests afterwards.
+Pin exact versions in `package.json`; run the tests afterwards. The bundle is served as its own file (the Pages
+workflow copies `vendor/`), not bundled into `app.js`, so the call can load fresh copies of it.

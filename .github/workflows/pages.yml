@@ -27,7 +27,7 @@ jobs:
       - run: npm run build
       - run: |
           mkdir _site
-          cp -r index.html preview.html app.js app.css chunks books _site/
+          cp -r index.html preview.html app.js app.css chunks books vendor _site/
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

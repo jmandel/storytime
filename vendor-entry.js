@@ -1,1 +1,1 @@
-export {joinRoom, selfId} from "@trystero-p2p/nostr"
+export {joinRoom, selfId, getRelaySockets, pauseRelayReconnection} from "@trystero-p2p/nostr"
