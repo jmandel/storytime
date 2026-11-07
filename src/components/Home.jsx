@@ -67,7 +67,7 @@ function FamilyHome({family}) {
   return (
     <main id="start" className="screen home">
       <header className="masthead">
-        <h1 id="familyTitle">{family.name || 'Our family'}</h1>
+        <h1 id="familyTitle">{family.name || 'Storytime'}</h1>
         {self?.name && <p className="lede">You're <strong id="whoAmI">{self.name}</strong> on this device.</p>}
       </header>
       {self?.name ? (

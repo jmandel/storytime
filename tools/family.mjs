@@ -24,4 +24,4 @@ function site() {
 const p = new URLSearchParams({f: process.env.STORYTIME_FAMILY_KEY})
 if (name) p.set('n', name)
 console.log(`\nFamily link${name ? ` for ${name}` : ''} (anyone with it is in the family):\n\n  ${site().replace(/^http:/, 'https:').replace(/\/?$/, '/')}#${p}\n`)
-if (!name) console.log('Give the family a name: npm run family -- "The Mandels"')
+if (!name) console.log('The family can name itself in the app (Settings), or: npm run family -- "Name"')
