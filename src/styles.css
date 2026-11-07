@@ -54,12 +54,22 @@ details summary { cursor: pointer; color: var(--mist); }
 .center .lede { max-width: 32ch; }
 
 /* Home and welcome: one left-aligned column; the family's name is the headline. */
-.home { max-width: 760px; margin: 0 auto; padding: max(40px, env(safe-area-inset-top)) 28px max(48px, env(safe-area-inset-bottom));
-  display: flex; flex-direction: column; gap: 28px; }
+.home { max-width: 760px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) 24px max(40px, env(safe-area-inset-bottom));
+  display: flex; flex-direction: column; gap: 24px; }
 .masthead h1 { font-size: clamp(2.6rem, 9vw, 4.4rem); letter-spacing: -.01em; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.brand { font-family: var(--serif); font-size: 1.5rem; }
+.hello { color: var(--mist); font-size: 1.05rem; }
+.hello strong { color: var(--chalk); }
+.wide { width: 100%; max-width: 440px; white-space: nowrap; }
+/* A plain text action (Settings, Add a book): lamp-coloured words, no box. */
+.textBtn { min-height: 44px; padding: 0 2px; color: var(--lamp); font-weight: 700; white-space: nowrap; }
+.textBtn:hover { text-decoration: underline; }
+.textBtn.danger { color: var(--warn); align-self: flex-start; white-space: normal; text-align: left; }
 .lede { color: var(--mist); font-size: 1.15rem; max-width: 46ch; margin-top: 10px; }
 .lede strong { color: var(--chalk); font-weight: 700; }
-.actions { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; }
+.actions { display: flex; flex-direction: column; align-items: stretch; gap: 12px; }
+.actions .hint { margin-top: 4px; }
 .home h2 { font-size: 1.6rem; margin-top: 12px; }
 .card { background: var(--wall-2); border-radius: 22px; padding: 24px; display: flex; flex-direction: column; gap: 16px; max-width: 520px; }
 .card h2 { font-size: 1.5rem; margin: 0; }
@@ -69,11 +79,11 @@ details summary { cursor: pointer; color: var(--mist); }
 .library { display: flex; flex-direction: column; gap: 22px; }
 .library h3 { font-size: 1.2rem; color: var(--mist); }
 .library input[type=search] { max-width: 420px; }
-.shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 26px 18px; margin-top: 10px; }
+.shelf { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 22px 18px; }
 .cover { display: flex; flex-direction: column; align-items: stretch; gap: 8px; text-align: left; }
-.cover .art { height: 150px; display: flex; align-items: flex-end; justify-content: center;
+.cover .art { height: 128px; display: flex; align-items: flex-end; justify-content: center;
   border-bottom: 5px solid #6f5638; padding: 0 6px; }
-.cover img { max-width: 100%; max-height: 144px; border-radius: 3px 6px 6px 3px; box-shadow: 2px 3px 0 rgba(0, 0, 0, .25); }
+.cover img { max-width: 100%; max-height: 122px; border-radius: 3px 6px 6px 3px; box-shadow: 2px 3px 0 rgba(0, 0, 0, .25); }
 .cover .name { font-weight: 700; line-height: 1.25; }
 .cover .sub { color: var(--mist); font-size: .9rem; margin-top: -6px; }
 .cover.cur .name { color: var(--lamp); }
@@ -88,7 +98,7 @@ details summary { cursor: pointer; color: var(--mist); }
 .storyPages { opacity: .7; }
 
 /* Adding a book */
-.shelfHead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 12px; }
+.shelfHead { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-top: 8px; }
 .shelfHead h2 { margin: 0; }
 .filePick { position: relative; cursor: pointer; }
 .filePick input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
@@ -135,16 +145,18 @@ details summary { cursor: pointer; color: var(--mist); }
 #waiting p { color: var(--mist); }
 #status { position: absolute; top: 24px; left: 24px; z-index: 3; padding: 6px 14px; border-radius: 999px; background: rgba(14, 30, 25, .8); }
 #tapToPlay { position: absolute; z-index: 4; left: 50%; top: 40%; transform: translate(-50%, -50%); }
-#bar { display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; padding-bottom: env(safe-area-inset-bottom); }
-#bar .quiet { background: rgba(30, 59, 51, .9); min-width: 108px; }
-@media (max-width: 480px) { #bar { gap: 8px; } #bar .quiet { min-width: 0; padding: 0 16px; } }
+#bar { display: flex; justify-content: center; gap: 10px; padding-bottom: env(safe-area-inset-bottom); }
+#bar .quiet { flex: 0 1 140px; min-width: 0; padding: 0 10px; background: rgba(30, 59, 51, .9); white-space: nowrap; }
+#bar .quiet.on { background: var(--chalk); color: var(--wall); }
+@media (max-width: 480px) { #bar { gap: 8px; } }
 
 /* The slim book bar (phones): cover, title, page, arrows. */
-#bookBar { display: flex; align-items: center; gap: 10px; background: var(--paper); color: var(--ink); border-radius: 18px; padding: 8px 10px; }
-#bookBar img { height: 52px; border-radius: 3px; }
+#bookBar { display: flex; align-items: center; gap: 8px; background: var(--paper); color: var(--ink); border-radius: 18px; padding: 8px 10px; }
+#bookBar img { height: 44px; max-width: 64px; object-fit: contain; border-radius: 3px; flex-shrink: 0; }
 #bookBar .label { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; text-align: left; }
 #bookBar .t { font-family: var(--serif); font-size: 1.05rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-#bookBar .p { color: #556860; font-size: .9rem; }
+#bookBar .p { color: #556860; font-size: .9rem; white-space: nowrap; }
+#bookBar .arrow { min-width: 48px; flex-shrink: 0; }
 .arrow { min-width: 60px; padding: 0; font-size: 2rem; line-height: 1; }
 #bookBar .quiet { border-color: rgba(27, 38, 33, .25); }
 
@@ -182,6 +194,8 @@ details summary { cursor: pointer; color: var(--mist); }
 @media (max-aspect-ratio: 4/5) {
   #call.withBook { flex-direction: column; }
   #call.withBook #book { width: auto; height: 56%; border-radius: 22px 22px 0 0; }
+  #call.withBook .tile.self { width: 68px; top: 18px; right: 18px; }
+  #call.withBook .tile.self figcaption { display: none; }
   #pageImg { height: 22vh; }
 }
 /* Short page panels: the words matter most; the page strip goes (the arrows stay). */

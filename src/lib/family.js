@@ -74,3 +74,9 @@ export function rememberPerson(name) {
 }
 
 export const leaveFamily = () => write(FAMILY, null)
+
+// "The Mandels" was briefly printed in our family link as a placeholder name (Nov 2026); clear it where it was saved.
+export function clearPlaceholderName() {
+  const fam = read(FAMILY)
+  if (fam?.name === 'The Mandels') write(FAMILY, {...fam, name: ''})
+}

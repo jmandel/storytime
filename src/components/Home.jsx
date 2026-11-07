@@ -27,7 +27,7 @@ function Welcome() {
       </header>
       {starting ? <StartFamily onCancel={() => setStarting(false)} /> : (
         <div className="actions">
-          <button id="startFamilyBtn" className="lamp" onClick={() => setStarting(true)}>Start a family</button>
+          <button id="startFamilyBtn" className="lamp big wide" onClick={() => setStarting(true)}>Start a family</button>
           <p className="hint">Someone already started yours? Open the family link they sent you, on this device.</p>
         </div>
       )}
@@ -44,14 +44,14 @@ function StartFamily({onCancel}) {
   const [mine, setMine] = useState('')
   const submit = e => {
     e.preventDefault()
-    if (name.trim() && mine.trim()) startFamily(name, mine)
+    if (mine.trim()) startFamily(name, mine)
   }
   return (
     <form id="startFamily" className="card" onSubmit={submit}>
-      <label>Family name <input id="familyName" autoFocus value={name} onChange={e => setName(e.target.value)} /></label>
-      <label>Your name <input id="myName" placeholder="Dad" value={mine} onChange={e => setMine(e.target.value)} /></label>
+      <label>Your name <input id="myName" autoFocus value={mine} onChange={e => setMine(e.target.value)} /></label>
+      <label>Name for the family (optional) <input id="familyName" value={name} onChange={e => setName(e.target.value)} /></label>
       <div className="row">
-        <button id="createFamilyBtn" className="lamp" disabled={!name.trim() || !mine.trim()}>Start the family</button>
+        <button id="createFamilyBtn" className="lamp" disabled={!mine.trim()}>Start the family</button>
         <button type="button" className="quiet" onClick={onCancel}>Cancel</button>
       </div>
     </form>
@@ -66,24 +66,21 @@ function FamilyHome({family}) {
   const share = () => shareLink(familyLink(family), family.name || 'Storytime')
   return (
     <main id="start" className="screen home">
-      <header className="masthead">
-        <h1 id="familyTitle">{family.name || 'Storytime'}</h1>
-        {self?.name && <p className="lede">You're <strong id="whoAmI">{self.name}</strong> on this device.</p>}
+      <header className="topbar">
+        <span className="brand">Storytime</span>
+        <button id="settingsBtn" className="textBtn" onClick={() => setSettingsOpen(true)}>Settings</button>
       </header>
       {self?.name ? (
         <div className="actions">
-          <button id="joinCallBtn" className="lamp big" onClick={() => go('call')}>Join the call</button>
-          <div className="row">
-            <button id="shareFamilyBtn" className="quiet" onClick={share}>Send the family link</button>
-            <button id="settingsBtn" className="quiet" onClick={() => setSettingsOpen(true)}>Settings</button>
-          </div>
-          <p className="hint">The family link works any time: whoever opens it joins the same call.</p>
+          <p className="hello">You're <strong id="whoAmI">{self.name}</strong> on this device.</p>
+          <button id="joinCallBtn" className="lamp big wide" onClick={() => go('call')}>Join the call</button>
+          <button id="shareFamilyBtn" className="quiet wide" onClick={share}>Send the family link</button>
         </div>
       ) : <WhoForm family={family} />}
       {error && <p className="warn">The books didn't load ({error}).</p>}
       <div className="shelfHead">
         <h2>Books</h2>
-        <button id="addBookBtn" className="quiet" onClick={() => go('add')}>Add a book</button>
+        <button id="addBookBtn" className="textBtn" onClick={() => go('add')}>Add a book</button>
       </div>
       {books?.length > 0 && <Library id="homeShelf" books={books} onPick={b => go(`view=${encodeURIComponent(b.id)}`)} />}
       {settingsOpen && <Settings family={family} self={self} onClose={() => setSettingsOpen(false)} />}
@@ -145,7 +142,7 @@ function Settings({family, self, onClose}) {
           <button id="settingsSave" className="lamp" onClick={save}>Save</button>
           <button id="settingsClose" className="quiet" onClick={onClose}>Cancel</button>
         </div>
-        <button id="settingsLeave" className="quiet danger" onClick={leave}>Remove this family from this device</button>
+        <button id="settingsLeave" className="textBtn danger" onClick={leave}>Remove this family from this device</button>
       </div>
     </div>
   )

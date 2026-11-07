@@ -13,7 +13,7 @@ check(await dad.locator('#homeShelf .cover').count() > 0, `a new device shows th
 await dad.click('#startFamilyBtn')
 await dad.fill('#familyName', 'The Testers'); await dad.fill('#myName', 'Dad'); await dad.click('#createFamilyBtn')
 await dad.waitForSelector('#joinCallBtn')
-check(await dad.textContent('#familyTitle') === 'The Testers' && await dad.textContent('#whoAmI') === 'Dad', 'starting a family names it and the person')
+check(await dad.textContent('#whoAmI') === 'Dad' && !(await dad.isVisible('#familyTitle')), 'starting a family names the person (no family headline)')
 
 await stubShare(dad)
 await dad.click('#shareFamilyBtn'); await dad.waitForFunction(() => window.copied)
@@ -22,7 +22,7 @@ const params = new URLSearchParams(link.split('#')[1])
 check(params.get('f')?.length === 43 && params.get('n') === 'The Testers', 'the family link carries the key and the name')
 
 await dad.reload(); await dad.waitForSelector('#joinCallBtn')
-check(await dad.textContent('#familyTitle') === 'The Testers', 'the family stays on the device')
+check(await dad.textContent('#whoAmI') === 'Dad', 'the family stays on the device')
 
 const gramma = await page(1180, 820)
 await gramma.goto(link); await gramma.waitForSelector('#whoForm')

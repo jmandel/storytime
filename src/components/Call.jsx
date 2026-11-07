@@ -157,7 +157,7 @@ function Call({family, self, stream, preview, onLeave}) {
         {!panel && shared && <BookBar shared={shared} books={books} onTurn={p => setShared(shared.id, p)} onPick={() => setPicking(true)} />}
         <nav id="bar">
           <button id="muteBtn" className={`quiet${muted ? ' on' : ''}`} onClick={toggleMute}>{muted ? 'Unmute' : 'Mute'}</button>
-          <button id="bookToggle" className="quiet" onClick={() => setPanel(v => !v)}>{panel ? 'Hide the book' : shared ? 'Show the words' : 'Books'}</button>
+          <button id="bookToggle" className={`quiet${panel ? ' on' : ''}`} aria-pressed={panel} onClick={() => setPanel(v => !v)}>Book</button>
           <button id="leaveBtn" className="quiet" onClick={leave}>Leave</button>
         </nav>
       </div>

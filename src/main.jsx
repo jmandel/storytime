@@ -1,6 +1,6 @@
 import {createRoot} from 'react-dom/client'
 import {App} from './App.jsx'
-import {ingestFamilyLink} from './lib/family.js'
+import {clearPlaceholderName, ingestFamilyLink} from './lib/family.js'
 import {installBackGuards} from './lib/guard.js'
 import './styles.css'
 
@@ -8,6 +8,7 @@ import './styles.css'
 // # comes along).
 if (location.protocol === 'http:' && !/^(localhost|127\.|\[::1\])/.test(location.hostname)) location.replace(location.href.replace(/^http:/, 'https:'))
 ingestFamilyLink()
+clearPlaceholderName()
 // Also when a family link is opened in a tab that already shows the app (only the hash changes, no reload). This
 // listener is added before React's, so the family is saved before the screen re-renders.
 addEventListener('hashchange', ingestFamilyLink)
