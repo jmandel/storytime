@@ -260,7 +260,9 @@ Wrap dialogue in `[Speaker: ...]`; narration stays plain:
 - Don't tag a speaker the text doesn't make clear; leave it plain.
 - `[` and `]` are reserved for tags; if a book prints square brackets, use parentheses.
 
-The reader's tablet shows each speaker's words in their color, and the speaker's name where the narration mentions
+The page follows the system's light or dark mode (the rest of the app is always dark green): white with dark words
+in light mode; a dark page with warm off-white words in dark mode, so a big white panel doesn't glare at bedtime.
+The reader's tablet shows each speaker's words in their color (darkened on a white page to keep contrast), and the speaker's name where the narration mentions
 it ("said Frog", "cried a squirrel") in the same color. Put every speaker in `voices` (or the collection's
 `voices`) so a name that only appears in narration on some page still gets its color.
 

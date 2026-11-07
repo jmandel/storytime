@@ -12,9 +12,17 @@
   --chalk: #edf3ec;      /* words on the wall */
   --mist: #a9bdb3;       /* quieter words on the wall */
   --warn: #f7b68f;
+  /* The book's page: white in light mode; in dark mode a dark page with warm off-white words (a big white panel
+     glares at bedtime in a dim room). */
+  --page: var(--paper); --page-ink: var(--ink); --page-mute: #556860; --page-line: rgba(27, 38, 33, .25);
+  --page-field: #f2efe4; --page-field-line: #d9d4c4; --page-shelf: #c9b48f; --page-note: #fbefc8;
   --serif: 'Young Serif', Georgia, serif;
   --sans: 'Atkinson Hyperlegible', system-ui, sans-serif;
   color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --page: #1a2d26; --page-ink: #f4ecdc; --page-mute: #a3b6ac; --page-line: rgba(244, 236, 220, .3);
+    --page-field: #22392f; --page-field-line: #33544a; --page-shelf: #6f5638; --page-note: #3b3418; }
 }
 * { box-sizing: border-box; }
 html, body, #root { height: 100%; margin: 0; }
@@ -173,45 +181,48 @@ details summary { cursor: pointer; color: var(--mist); }
 }
 
 /* The slim book bar (phones): cover, title, page, arrows. */
-#bookBar { display: flex; align-items: center; gap: 8px; background: var(--paper); color: var(--ink); border-radius: 18px; padding: 8px 10px; }
+#bookBar { display: flex; align-items: center; gap: 8px; background: var(--page); color: var(--page-ink); border-radius: 18px; padding: 8px 10px; }
 #bookBar img { height: 44px; max-width: 64px; object-fit: contain; border-radius: 3px; flex-shrink: 0; }
 #bookBar .label { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; text-align: left; }
 #bookBar .t { font-family: var(--serif); font-size: 1.05rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
-#bookBar .p { color: #556860; font-size: .9rem; white-space: nowrap; }
+#bookBar .p { color: var(--page-mute); font-size: .9rem; white-space: nowrap; }
 #bookBar .arrow { min-width: 48px; flex-shrink: 0; }
 .arrow { min-width: 60px; padding: 0; font-size: 2rem; line-height: 1; }
-#bookBar .quiet { border-color: rgba(27, 38, 33, .25); }
+#bookBar .quiet { border-color: var(--page-line); }
 
 /* The page: white, the picture on top, the words large. */
-#book { container-type: size; width: min(50%, 720px); flex-shrink: 0; background: var(--paper); color: var(--ink); display: flex; flex-direction: column;
+#book { container-type: size; width: min(50%, 720px); flex-shrink: 0; background: var(--page); color: var(--page-ink); display: flex; flex-direction: column;
+  border-left: 1px solid var(--wall-3);
   min-height: 0; }
-#book .quiet, #book .storyList button { border-color: rgba(27, 38, 33, .25); }
-#book .hint, #book .library h3 { color: #556860; }
-#book .cover .name { color: var(--ink); }
+#book .quiet, #book .storyList button { border-color: var(--page-line); }
+#book .hint, #book .library h3 { color: var(--page-mute); }
+#book .cover .name { color: var(--page-ink); }
 #book .cover.cur .name { color: inherit; text-decoration: underline 3px var(--lamp); }
-#book input { background: #f2efe4; color: var(--ink); border-color: #d9d4c4; }
+#book input { background: var(--page-field); color: var(--page-ink); border-color: var(--page-field-line); }
 #bookHead { display: flex; align-items: center; gap: 12px; padding: 16px 18px 8px; }
 #bookTitle { flex: 1; font-size: 1.35rem; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #book > .library, #book > #shelfMsg { padding: 8px 18px 18px; overflow: auto; }
-#book .cover .art { border-bottom-color: #c9b48f; }
+#book .cover .art { border-bottom-color: var(--page-shelf); }
 #reader { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 /* The picture gives way to the words: at most 34vh and 42% of the page panel, shrinking first. */
 #pageImg { height: auto; width: auto; max-height: min(34vh, 34cqh); max-width: calc(100% - 36px); min-height: 0; flex: 0 1 auto;
   margin: 8px auto 0; border-radius: 6px; object-fit: contain; }
-#pageNote { text-align: center; margin: 10px 18px 0; padding: 6px 12px; border-radius: 10px; background: #fbefc8; font-weight: 700; }
+#pageNote { text-align: center; margin: 10px 18px 0; padding: 6px 12px; border-radius: 10px; background: var(--page-note); font-weight: 700; }
 #textWrap { flex: 1; position: relative; min-height: 0; display: flex; }
 #textWrap::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2.5em; pointer-events: none; opacity: 0;
-  background: linear-gradient(transparent, var(--paper)); transition: opacity .2s; }
+  background: linear-gradient(transparent, var(--page)); transition: opacity .2s; }
 #moreCue { position: absolute; right: 18px; bottom: 4px; font-size: .85em; font-weight: 700; opacity: 0; transition: opacity .2s; }
 #textWrap.more::after, #textWrap.more #moreCue { opacity: 1; }
 #pageText { flex: 1; min-height: 0; overflow: auto; padding: 14px 24px; line-height: 1.35; white-space: pre-wrap; font-weight: 700; }
-.said { font-weight: 700; }
-.named { font-weight: 700; }
+/* Speakers' colours (from the book, or a palette made for dark backgrounds): darkened on a white page so they keep
+   their contrast, as they are on a dark one. */
+.said, .named { font-weight: 700; color: color-mix(in oklab, var(--voice) 58%, #10201a); }
+@media (prefers-color-scheme: dark) { .said, .named { color: var(--voice); } }
 #nextStory { margin: 0 18px 8px; align-self: center; }
 #nav { display: flex; align-items: center; gap: 12px; padding: 6px 18px; }
-#nav .navLabel { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; color: #556860; }
+#nav .navLabel { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; color: var(--page-mute); }
 #nav .navLabel:disabled { opacity: 1; }
-.navTitle { display: none; font-family: var(--serif); color: var(--ink); max-width: 100%; white-space: nowrap; overflow: hidden;
+.navTitle { display: none; font-family: var(--serif); color: var(--page-ink); max-width: 100%; white-space: nowrap; overflow: hidden;
   text-overflow: ellipsis; font-size: 1.05rem; }
 /* A narrow page panel: the header goes and the title sits between the arrows (tap it for the shelf). */
 @container (max-width: 480px) {

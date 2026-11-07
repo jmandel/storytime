@@ -1,6 +1,7 @@
 // Page text may mark who is talking: [Frog: "Toad, Toad,"] shouted Frog. Each speaker's words are shown in their
 // color (from the book's "voices", or a default palette), and the speaker's name in the narration ("said Frog",
-// "cried a squirrel") gets the same color, so the reader can tell the voices apart at a glance.
+// "cried a squirrel") gets the same color, so the reader can tell the voices apart at a glance. The colour goes in
+// --voice; the stylesheet darkens it on a white page.
 const VOICE_COLORS = ['#7bd88f', '#ffb347', '#8ab4ff', '#ff8fb1', '#c8a2ff', '#5fd3d0']
 const TAG = /(\[[^\]:]+:[^\]]*\])/
 
@@ -25,7 +26,7 @@ function Narration({text, colors}) {
   for (const m of text.matchAll(re)) {
     out.push(text.slice(last, m.index))
     const who = names.find(n => n.toLowerCase() === m[0].toLowerCase())
-    out.push(<span key={m.index} className="named" style={{color: colors[who]}}>{m[0]}</span>)
+    out.push(<span key={m.index} className="named" style={{'--voice': colors[who]}}>{m[0]}</span>)
     last = m.index + m[0].length
   }
   out.push(text.slice(last))
@@ -37,6 +38,6 @@ export function SpeakerText({text, voices}) {
   return text.split(TAG).map((part, i) => {
     const m = part.match(/^\[([^\]:]+):\s*([^\]]*)\]$/)
     if (!m) return <Narration key={i} text={part} colors={colors} />
-    return <span key={i} className="said" style={{color: colors[m[1]]}}>{m[2]}</span>
+    return <span key={i} className="said" style={{'--voice': colors[m[1]]}}>{m[2]}</span>
   })
 }
