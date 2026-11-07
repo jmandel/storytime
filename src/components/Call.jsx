@@ -8,27 +8,34 @@ import {claimCall, restartPending, useCall, useWakeLock} from '../lib/call.js'
 import {entriesById, openBook as fetchBook, pageLabel, useLibrary} from '../lib/library.js'
 import {goReplace, linkWith, shareLink} from '../lib/links.js'
 import {leaveCallOnPurpose, useBackLayer} from '../lib/guard.js'
-import {LAST_CALLS, SETUP, read, rememberBook} from '../lib/store.js'
+import {MY_CALL, SETUP, callSide, read, rememberBook, write} from '../lib/store.js'
 
-// The same call's link for the other side.
-const otherSide = params => {
+// The link to send: the same call with no side (each device works out its own) and without this phone's own
+// settings (tonight's books go over the call instead).
+const sharedLink = params => {
   const p = new URLSearchParams(params)
-  p.set('as', params.get('as') === 'reader' ? 'child' : 'reader')
-  p.delete('preview')
+  for (const k of ['as', 'b', 'preview']) p.delete(k)
   return p
 }
 
-export function CallRoute({params}) {
+// This call on a given side (when a device guessed its side wrong).
+const sideLink = (params, as) => { const p = sharedLink(params); p.set('as', as); return p }
+
+export function CallRoute({params: linkParams}) {
+  // The side this device is on, decided once: from its saved setup, or the link's as=.
+  const [params] = useState(() => { const p = new URLSearchParams(linkParams); p.set('as', callSide(linkParams)); return p })
   const [stream, setStream] = useState(null)
   const [error, setError] = useState('')
   const [restart] = useState(() => restartPending(params))
   const isReader = params.get('as') === 'reader'
   const withName = isReader ? params.get('child') : params.get('reader')
-  // This device started the call, so the reader's link was opened here by mistake (e.g. from the message it was
-  // sent in): go to this device's own side instead.
-  const ownSide = isReader && Object.values(read(LAST_CALLS) || {}).find(c => {
-    try { return new URLSearchParams(new URL(c.child).hash.slice(1)).get('r') === params.get('r') } catch { return false }
-  })
+  useEffect(() => {
+    document.title = withName ? `Storytime with ${withName}` : 'Storytime'  // also the name a home-screen icon gets
+    // The reader's tablet (no setup of its own) remembers its call, so the bare address (a home-screen icon that
+    // lost the link) opens it too.
+    if (isReader && !read(SETUP)) write(MY_CALL, sharedLink(params).toString())
+    return () => { document.title = 'Storytime' }
+  }, [])
 
   const join = async () => {
     setError('')
@@ -42,15 +49,15 @@ export function CallRoute({params}) {
     }
   }
   useEffect(() => {
-    if (ownSide) return goReplace(new URL(ownSide.child).hash.slice(1))
-    // Straight in when this page has already been tapped (the parent pressed Start a call, so sound can play);
-    // a freshly opened link needs one tap.
-    if (params.get('preview') === '1' || restart || navigator.userActivation?.hasBeenActive) join()
+    // Straight in on the parent's device when this page has already been tapped (they pressed Call, so sound can
+    // play); the reader always taps Join, so a reload or a reopened link never turns her camera on by itself.
+    if (params.get('preview') === '1' || restart || (read(SETUP) && navigator.userActivation?.hasBeenActive)) join()
   }, [])
   useEffect(() => () => stream?.getTracks().forEach(t => t.stop()), [stream])
 
-  if (ownSide) return null
-  if (stream) return <Call params={params} stream={stream} claim={!!restart?.claim} onRejoin={() => claimCall(params)} />
+  // Leaving on a device without a setup of its own (the reader's tablet) comes back to this Join screen.
+  if (stream) return <Call params={params} stream={stream} claim={!!restart?.claim} onRejoin={() => claimCall(params)}
+    onLeave={read(SETUP) ? null : () => setStream(null)} />
   return (
     <section id="join" className="screen on center">
       <h1 id="joinTitle">{withName ? `Storytime with ${withName}` : 'Storytime'}</h1>
@@ -78,7 +85,7 @@ function Video({stream, onBlocked, ...props}) {
   return <video ref={ref} autoPlay playsInline {...props} />
 }
 
-function Call({params, stream, claim, onRejoin}) {
+function Call({params, stream, claim, onRejoin, onLeave}) {
   const isReader = params.get('as') === 'reader'
   const reader = params.get('reader') || 'the reader', child = params.get('child') || 'the child'
   const handlers = useRef({})
@@ -96,11 +103,7 @@ function Call({params, stream, claim, onRejoin}) {
     track.enabled = !track.enabled
     setMuted(!track.enabled)
   }
-  const leave = () => leaveCallOnPurpose() || goReplace(read(SETUP) ? '' : (() => {
-    const p = new URLSearchParams(params)
-    for (const k of ['r', 'k', 'as', 'b', 'preview']) p.delete(k)
-    return p
-  })())
+  const leave = () => onLeave ? onLeave() : (leaveCallOnPurpose(), goReplace(''))
 
   const childSide = useChildBooks({params, call, handlers, reader, enabled: !isReader})
   const mySide = isReader ? reader : `${child}'s phone`
@@ -125,11 +128,12 @@ function Call({params, stream, claim, onRejoin}) {
               {isReader ? <>
                 <h2>{reader[0].toUpperCase() + reader.slice(1)} is already using this link</h2>
                 <p>This link is for {reader}. If you started the call, open your own side instead.</p>
-                <button id="switchSideBtn" onClick={() => goReplace(otherSide(params))}>Open {child}'s side</button>
+                <button id="switchSideBtn" onClick={() => goReplace(sideLink(params, 'child'))}>Open {child}'s side</button>
                 <button id="takeOverBtn" className="ghost" onClick={call.takeOver}>I'm {reader}: use this screen</button>
               </> : <>
                 <h2>This call is already open on another screen</h2>
                 <button id="takeOverBtn" onClick={call.takeOver}>Use this screen</button>
+                <button id="switchReaderBtn" className="ghost" onClick={() => goReplace(sideLink(params, 'reader'))}>I'm {reader}</button>
                 <button className="ghost" onClick={leave}>Leave</button>
               </>}
             </div>
@@ -165,7 +169,7 @@ function Waiting({params, isReader, reader, child, onRetry}) {
       {retry}
     </div>
   )
-  const link = linkWith(otherSide(params))
+  const link = linkWith(sharedLink(params))
   const title = params.get('child') ? `Storytime with ${params.get('child')}` : 'Storytime'
   return (
     <div id="waiting">
@@ -201,6 +205,7 @@ function useChildBooks({params, call, handlers, reader, enabled}) {
     setRemoteState(msg)
   }
   handlers.current.onPeerJoin = id => {
+    if (stack.length) call.send({stack}, id)  // tonight's books: the reader's tablet opens the first
     if (pending.current) call.send({want: pending.current}, id)
     pending.current = null
   }
@@ -233,9 +238,10 @@ function useChildBooks({params, call, handlers, reader, enabled}) {
 }
 
 // The reader's side: the shelf, then the open book with its words fitted to the space.
+// Tonight's books come from the phone when it joins ({stack}); an older link may carry them as b=.
 function ReaderBook({params, call, handlers}) {
   const lk = params.get('lk'), lib = params.get('lib')
-  const stack = (params.get('b') || '').split(',').filter(Boolean)
+  const [stack, setStack] = useState(() => (params.get('b') || '').split(',').filter(Boolean))
   const {books, error: listError} = useLibrary(lk, lib)
   const [book, setBook] = useState(null)
   const [pageNo, setPageNo] = useState(0)
@@ -244,6 +250,7 @@ function ReaderBook({params, call, handlers}) {
   const [shelfOpen, setShelfOpen] = useState(false)
   useBackLayer(shelfOpen && !!book, () => setShelfOpen(false))
   const opened = useRef(false)
+  const busy = useRef(false)  // a book is open or opening: tonight's books arriving later don't replace it
   const byId = entriesById(books)
   const entry = book && byId.get(book.id)
   const nextStory = entry?.next && byId.get(entry.next)
@@ -253,6 +260,7 @@ function ReaderBook({params, call, handlers}) {
   currentRef.current = current
 
   const openBook = async (entry, page = 0) => {
+    busy.current = true
     setShelfOpen(false)
     setLoading(entry.title)
     try {
@@ -280,6 +288,12 @@ function ReaderBook({params, call, handlers}) {
   useEffect(() => { call.send(current) }, [current?.id, current?.page])
   handlers.current.onPeerJoin = id => call.send(currentRef.current, id)
   handlers.current.onMessage = msg => {
+    if (Array.isArray(msg?.stack)) {
+      setStack(msg.stack)
+      const first = byId.get(msg.stack[0])
+      if (books && !busy.current && first && !first.collection) openBook(first)
+      return
+    }
     const w = msg?.want
     if (!w) return
     if (book && w.id === book.id) return goTo(w.page ?? pageNo)

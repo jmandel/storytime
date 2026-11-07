@@ -1,4 +1,4 @@
-// Who is on which side: the phone that started the call opening the reader's link lands on its own side; a second
+// Who is on which side: there is one link; the phone that started the call opening it lands on its own side; a second
 // screen on the reader's link doesn't take over the call unless told to, and then the old screen steps aside.
 import {browser, page, check, URL_, LK} from './lib.mjs'
 const phoneCtx = await browser.newContext({viewport: {width: 390, height: 844}, isMobile: true, hasTouch: true})
@@ -6,7 +6,7 @@ const phone = await phoneCtx.newPage()
 await phone.goto(`${URL_}#lk=${LK}&reader=Grandma&child=Cleo`)
 await phone.click('#startBtn'); await phone.waitForSelector('#leaveBtn')
 const link = await phone.textContent('#linkbox')
-check(new URLSearchParams(link.split('#')[1]).get('as') === 'reader', 'the call screen offers the reader link')
+check(!new URLSearchParams(link.split('#')[1]).has('as'), 'the call screen offers the one link, naming no side')
 
 const tablet = await page(1180, 820)
 await tablet.goto(link); await tablet.click('#joinBtn')
@@ -14,8 +14,9 @@ const video = (p, t = 45000) => p.waitForFunction(() => document.getElementById(
 check(await video(phone) && await video(tablet), 'phone and tablet connect')
 
 const again = await phoneCtx.newPage()
-await again.goto(link); await again.waitForTimeout(800)
-check(new URLSearchParams(again.url().split('#')[1]).get('as') === 'child', "opening the reader's link on the phone that started the call goes to the phone's side")
+await again.goto(link); await again.waitForSelector('#joinTitle, #leaveBtn')
+check(await again.evaluate(() => window.__storytimeCall?.me.role === 'child' || document.getElementById('joinTitle')?.textContent.includes('Grandma')),
+  "the same link opened on the phone that started the call is the phone's side")
 await again.close()
 
 const other = await page(1180, 820)

@@ -1,10 +1,10 @@
-// The parent's phone before a call: who's reading, tonight's books, start (or get back to) a call, settings.
+// The parent's phone before a call: who's reading, tonight's books, call (always the same call per reader), settings.
 import {useEffect, useState} from 'react'
 import {guardHome, useBackLayer} from '../lib/guard.js'
 import {Library} from './Library.jsx'
 import {useLibrary} from '../lib/library.js'
-import {go, linkWith, randomId, shareLink} from '../lib/links.js'
-import {LAST_CALLS, RECENT, SETUP, homeLinkParams, setupParams, update, useStored, write} from '../lib/store.js'
+import {go, linkWith, shareLink} from '../lib/links.js'
+import {MY_CALL, RECENT, SETUP, callLink, homeLinkParams, newCall, update, useStored, write} from '../lib/store.js'
 
 export function Home() {
   const setup = useStored(SETUP)
@@ -17,34 +17,30 @@ export function Home() {
   const {books, error} = useLibrary(setup?.lk, setup?.lib)
   useEffect(guardHome, [])
 
+  // Straight into this reader's call (the same room every time, so leaving and calling again finds the reader still
+  // there); tonight's books ride in this phone's own address and go to the reader's tablet over the call.
   const startCall = () => {
-    const p = setupParams(setup)
-    p.set('r', randomId(12))
-    p.set('k', randomId(18))
+    const p = callLink(setup, reader)
     if (picked.length) p.set('b', picked.join(','))
-    const links = {}
-    for (const role of ['reader', 'child']) {
-      const q = new URLSearchParams(p)
-      q.set('as', role)
-      links[role] = q
-    }
-    update(LAST_CALLS, all => ({...all, [reader]: {child: linkWith(links.child), reader: linkWith(links.reader), at: Date.now()}}))
-    // Straight into the call; sending the link happens there, so this phone is already waiting when it's opened.
-    go(links.child)
+    go(p)
   }
+  const title = setup?.child ? `Storytime with ${setup.child}` : 'Storytime'
+  const sendLink = () => shareLink(linkWith(callLink(setup, reader)), title)
 
   return (
     <section id="start" className="screen on center">
       <h1>Storytime</h1>
       <>
         <Readers setup={setup || {}} />
-        <p id="startText">Start a call, then send {reader || 'the reader'} the link from the call screen.</p>
+        <p id="startText">{reader || 'The reader'}'s link stays the same: send it once (or ahead of time) and you can both open it.</p>
+        <div className="row">
+          <button id="startBtn" onClick={startCall}>{reader ? `Call ${reader}` : 'Start a call'}</button>
+          <button id="sendLinkBtn" className="ghost" onClick={sendLink}>Send {reader || 'the reader'} the link</button>
+        </div>
         {error && <p className="warn">Couldn't open the books ({error}).</p>}
-        <p id="startHint">{picked.length ? `${picked.length} book${picked.length > 1 ? 's' : ''} for tonight` : 'Tap books for tonight (optional)'}</p>
+        <p id="startHint">{picked.length ? `${picked.length} book${picked.length > 1 ? 's' : ''} for tonight` : 'Tap books for tonight before calling (optional)'}</p>
         {books && <Library id="startShelf" books={books} picked={picked}
           onPick={b => setPicked(p => p.includes(b.id) ? p.filter(i => i !== b.id) : [...p, b.id])} />}
-        <button id="startBtn" onClick={startCall}>Start a call</button>
-        <LastCall reader={reader} child={setup?.child} />
         {!setup?.lk && <p id="keyHint" className="small">Have a Storytime home link? Open it once on this device to add your own books.</p>}
         <div className="row">
           <button id="viewBtn" className="ghost small" onClick={() => setBrowsing(true)}>Look at the books</button>
@@ -99,23 +95,6 @@ function Readers({setup}) {
   )
 }
 
-// Get back into the last call with this reader (left by accident, or the text didn't arrive), for 12 hours.
-function LastCall({reader, child}) {
-  const last = (useStored(LAST_CALLS) || {})[reader]
-  const ago = last && (Date.now() - last.at) / 60000
-  if (!last || ago > 12 * 60) return null
-  const when = ago < 1 ? 'just now' : ago < 60 ? `${Math.round(ago)} min ago` : `${Math.round(ago / 60)} h ago`
-  return (
-    <div id="lastCall">
-      <p id="lastCallText">Last call{reader ? ` with ${reader}` : ''}: {when}</p>
-      <div className="row">
-        <button id="lastBackBtn" className="ghost" onClick={() => go(new URL(last.child).hash.slice(1))}>Back to the call</button>
-        <button id="lastSendBtn" className="ghost" onClick={() => shareLink(last.reader, child ? `Storytime with ${child}` : 'Storytime')}>Send link again</button>
-      </div>
-    </div>
-  )
-}
-
 function Settings({setup, onClose}) {
   const [form, setForm] = useState({
     readers: (setup.readers || []).join('\n'), child: setup.child || '', relay: setup.relay || '', turn: setup.turn || '',
@@ -129,14 +108,15 @@ function Settings({setup, onClose}) {
         if (v) next[k] = v; else delete next[k]
       }
       next.readers = [...new Set(form.readers.split('\n').map(n => n.trim()).filter(Boolean))]
+      if (next.calls) next.calls = Object.fromEntries(Object.entries(next.calls).filter(([r]) => next.readers.includes(r)))
       if (!next.readers.includes(next.current)) next.current = next.readers[0] || ''
       return next
     })
     onClose()
   }
   const forget = () => {
-    if (!confirm('Forget the books key, names and last calls on this device?')) return
-    for (const k of [SETUP, LAST_CALLS, RECENT]) write(k, null)
+    if (!confirm("Forget the books key, names and readers' links on this device?")) return
+    for (const k of [SETUP, RECENT, MY_CALL]) write(k, null)
     onClose()
   }
   return (
@@ -154,6 +134,9 @@ function Settings({setup, onClose}) {
           <button id="settingsSave" onClick={saveSettings}>Save</button>
           <button id="settingsClose" className="ghost" onClick={onClose}>Cancel</button>
         </div>
+        {setup.current && <button id="settingsNewLink" className="ghost small" onClick={() => {
+          if (confirm(`Make a new link for ${setup.current}? The old one stops working.`)) { newCall(setup.current); onClose() }
+        }}>New link for {setup.current}</button>}
         <button id="settingsHome" className="ghost small" onClick={() => shareLink(linkWith(homeLinkParams(setup)))}>
           Share home link (set up another device)
         </button>

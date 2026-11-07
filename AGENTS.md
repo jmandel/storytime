@@ -9,7 +9,7 @@ video plus the current page's words in big type. It is a static site (GitHub Pag
 | Path | What it is |
 |---|---|
 | `src/` | the app, React 18 (built with esbuild into `app.js` + `app.css`, which are gitignored) |
-| `src/components/Home.jsx` | parent's phone before a call: who's reading, tonight's books, last call, settings |
+| `src/components/Home.jsx` | parent's phone before a call: who's reading, tonight's books, call and send the reader's link, settings |
 | `src/components/Call.jsx` | join screen, video stage (with the reader's link to send while waiting), the reader's book panel (`ReaderBook`, `Page`), the phone's book controls |
 | `src/components/Library.jsx` | book browsing (tonight, recent, all, search) used in all three places |
 | `src/lib/` | `call.js` (Trystero room, retries), `library.js` (encrypted books), `store.js` (saved setup), `links.js` |
@@ -35,16 +35,17 @@ video plus the current page's words in big type. It is a static site (GitHub Pag
 
 Everything after `#` stays in the browser; GitHub never sees it.
 
-    #lk=<library key>&reader=Gramma,Grammie&child=Cleo     the parent's home link (open once per device)
-    #r=<room>&k=<call secret>&as=reader|child&lk=...&b=...  a call link (made by "Start a call")
+    #lk=<library key>&reader=Gramma,Grammie&child=Cleo&calls=...  the parent's home link (open once per device)
+    #r=<room>&k=<call secret>&lk=...&reader=Gramma&child=Cleo      a reader's call link: one link for both sides
 
 | Setting | Meaning |
 |---|---|
 | `lk` | library key (`STORYTIME_LIBRARY_KEY` from `.env`); opens `books/` |
-| `r`, `k` | room name and call secret, fresh for every call; `k` encrypts the call setup messages |
-| `as` | `reader` (book panel) or `child` (phone on the stand) |
+| `r`, `k` | room name and call secret: one pair per reader, kept for good (Settings → "New link for <reader>" replaces it); `k` encrypts the call setup messages |
+| `as` | optional: force `reader` (book panel) or `child` (phone on the stand); normally each device works out its side |
 | `reader`, `child` | names shown in the app; neutral wording when absent. In a home link `reader` may list several readers (`Gramma,Grammie`); a call link carries only the one being called |
-| `b` | tonight's stack, `id,id,...`; the reader's tablet opens the first |
+| `calls` | home link only: base64url JSON `{<reader>: {r, k}}`, so every parent device calls the same rooms |
+| `b` | tonight's stack, `id,id,...`, on the phone's own address only; sent to the tablet over the call, which opens the first |
 | `lib` | another folder or URL to load the encrypted books from |
 | `relay` | `wss://...,wss://...` signaling relays instead of the default Nostr relays in `app.js` |
 | `turn` | base64url of a JSON `iceServers` list, for networks that block direct calls |
@@ -55,17 +56,27 @@ The start screen's "Look at the books" opens any book (or story) in a new tab at
 without a call, with "Download PDF" (one page per book page: the picture and its words; jsPDF is loaded only then).
 `#view=` links can be bookmarked; they use the library key saved on the device.
 
-How a call starts: "Start a call" on the parent's phone goes straight into the call (no Join tap: the page has
-already been tapped, so sound can play), and the waiting screen there offers "Send <reader> the link" / "Copy link",
-so the phone is already in the call when the reader opens it. The reader's freshly opened link needs one Join tap.
+One link per reader, the same every time: "Call <reader>" on the parent's phone always opens that reader's call, and
+the link can be sent ahead ("open this at 10 tomorrow") or bookmarked on the reader's tablet. Whoever opens it first
+waits for the other. Leaving (or Back) and calling again finds the reader still there. The start screen and the
+waiting screen both offer "Send <reader> the link". The phone goes straight into the call (no Join tap: the page has
+already been tapped, so sound can play). The reader always taps Join (a reload or a reopened link never turns her
+camera on by itself).
+
+Which side a device is on (`callSide` in `src/lib/store.js`): the parent's devices have the reader's call saved in
+their setup (made on first use, carried by the home link as `calls=`), so they are the child's phone; any other
+device is the reader. An explicit `as=` wins. Tonight's books ride in the phone's own address (`b=`), never in the
+link, and go to the tablet over the call (`{stack}`); the tablet opens the first unless a book is already open.
+`tests/onelink.mjs` covers this.
 
 Who is on which side (`src/lib/call.js`): every screen says hello every 4 s with its side (`as`), when it joined,
 whether it is in the foreground and whether our video is reaching it. Each screen shows the other side's screen
 (still saying hello, video arriving, foreground, longest in the call) and never a second copy of its own side.
-- The phone that started a call opening the reader's link (e.g. tapping it in the message it was sent in) is sent
-  to its own side (it finds the call in its saved last calls).
+- The phone that started a call opening the link (e.g. tapping it in the message it was sent in) is on its own side,
+  since it has the call saved.
 - A second screen on the same side: a background copy steps aside for a foreground one; otherwise the newer one
-  shows "already using this link" with "Open <child>'s side" / "I'm <reader>: use this screen". A screen that stepped
+  shows "already using this link" with "Open <child>'s side" / "I'm <reader>: use this screen" (a second child screen
+  offers "Use this screen" / "I'm <reader>", for a parent's device used as the reader's). A screen that stepped
   aside shows "The call moved to another screen" with "Use this screen".
 - Cameras are sent one way at a time (lower peer id first, the other when that video arrives), because two
   simultaneous renegotiations can collide and lose one direction (this caused one-way calls).
@@ -96,11 +107,23 @@ directly, so the guard can tell the app's own navigation from Back.
 
 The parent's phone saves those settings in localStorage the first time the home link is opened, so afterwards the
 bare site address is enough (the key is not put back into the address bar). The start screen shows "Who's
-reading?" with a button per reader (the one called last is preselected; **+** adds one). Per reader it saves the
-last call (offered as "Back to the call" / "Send link again" for 12 hours); it also keeps the last 8 books opened.
-The Settings panel edits the readers (one per line), the child's name and connection settings, shares the home link
-to set up another device, and "Forget this device" clears all of it. Call links themselves are never saved. The
-reader's tablet saves only recent books.
+reading?" with a button per reader (the one called last is preselected; **+** adds one), then "Call <reader>" and
+"Send <reader> the link"; it also keeps the last 8 books opened. The Settings panel edits the readers (one per line),
+the child's name and connection settings, makes a new link for the current reader (the old one stops working),
+shares the home link to set up another device (with the readers' calls), and "Forget this device" clears all of it.
+The reader's tablet saves only recent books and the call link it was opened with (`storytime-my-call`), so the bare
+site address opens that call too; Leave there comes back to its Join screen.
+
+### On the reader's tablet: home screen and Siri
+
+Open the reader's link in Safari, then Share → Add to Home Screen. The suggested name is the page title ("Storytime
+with Cleo"); the icon is `apple-touch-icon.png` (the ghost cub from our own book). For Siri, make a Shortcut on the
+tablet: Shortcuts → + → "Open URLs" with the reader's link, named e.g. "Storytime with Cleo"; "Hey Siri, Storytime
+with Cleo" opens it (the Shortcut can also go on the home screen). Either way she taps Join.
+
+Updates: there is no service worker. A page that comes back to the front (and every half hour) checks `app.js`'s
+ETag / Last-Modified and reloads when a new version is published, but not during a call (`watchForUpdates` in
+`src/main.jsx`), so a home-screen app left open for days still picks up new versions. Books always revalidate.
 
 ## Adding a book from a real one
 
@@ -279,8 +302,9 @@ Build, serve the folder locally and run the tests (Chromium with a fake camera; 
 
     npm run serve &                             # python3 -m http.server 8092 --bind 127.0.0.1
     npm test                                    # call (connect, wrong secret refused), books (stack, switching,
-                                                # page turns both ways), setup (saved setup, readers, last call,
-                                                # settings, forget), public (no key), collections, viewer (+ PDF)
+                                                # page turns both ways), setup (saved setup, readers, one call per reader,
+                                                # settings, forget), public (no key), collections, viewer (+ PDF), back, sides, recover,
+                                                # onelink (one link for both sides, Back then call again)
     STORYTIME_LIB=books-test/ node tests/books.mjs   # same with a big test library, if you made one
     node tests/screens.mjs                      # screenshots of every screen at six sizes -> tests/out/
 
@@ -294,7 +318,7 @@ with the same key: `node tools/pack-books.mjs <folder> books-test`.
 ## Deploying
 
 Pushing to `main` runs `.github/workflows/pages.yml`: `npm ci`, `npm run build`, then publishes `index.html`,
-`preview.html`, `app.js`, `app.css`, `chunks/` and `books/` to GitHub Pages. Commit `books/` together with any app change that
+`preview.html`, `app.js`, `app.css`, the icons, `chunks/`, `vendor/` and `books/` to GitHub Pages. Commit `books/` together with any app change that
 needs it, run the tests, then push. Check before pushing that no book sources, page images,
 `.env` or key values are in the commit (`git show --stat`; `git grep` for the key).
 
@@ -303,7 +327,9 @@ needs it, run the tests, then push. Check before pushing that no book sources, p
 - **Library key** (`STORYTIME_LIBRARY_KEY` in `.env`): created by the first `npm run pack` if empty. Anyone with a
   link containing `lk` can read every book that is online. To revoke old links: empty the value, repack (a new key is
   written to `.env`), commit `books/`, and give the parent a new home link.
-- **Call secret** (`k`): new for every call, made in the browser; nothing to manage.
+- **Call secret** (`k`): one per reader, made in the browser the first time that reader is called and kept. Anyone
+  with the reader's link can join while the phone is in that call. To revoke it: Settings → "New link for <reader>",
+  send the new link, and reshare the home link to the parent's other devices.
 
 ## Relays and fallbacks
 
