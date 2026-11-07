@@ -6,6 +6,7 @@ import {useEffect, useLayoutEffect, useRef, useState} from 'react'
 import {Library} from './Library.jsx'
 import {SpeakerText} from './SpeakerText.jsx'
 import {WhoForm} from './Home.jsx'
+import {Icon} from './Icon.jsx'
 import {markRestart, restartPending, useCall, useWakeLock} from '../lib/call.js'
 import {entriesById, openBook as fetchBook, pageLabel, useFamilyBooks} from '../lib/library.js'
 import {goReplace, shareLink} from '../lib/links.js'
@@ -90,8 +91,10 @@ function useSharedBook(handlers, call, self) {
   const newer = (a, b) => !b || a.at > b.at || (a.at === b.at && a.by > b.by)
   handlers.current.onMessage = msg => { if (msg?.book && newer(msg.book, ref.current)) take(msg.book) }
   handlers.current.onPeerJoin = id => ref.current && call.send({book: ref.current}, id)
-  const set = (id, page) => {
-    const b = {id, page, at: Math.max(Date.now(), (ref.current?.at || 0) + 1), by: self.device}
+  // label: the page's printed label ("Pages 162–163"), when this screen has the book open; screens showing only the
+  // slim bar use it.
+  const set = (id, page, label) => {
+    const b = {id, page, ...(label ? {label} : {}), at: Math.max(Date.now(), (ref.current?.at || 0) + 1), by: self.device}
     take(b)
     call.send({book: b})
   }
@@ -161,19 +164,19 @@ function Call({family, self, stream, preview, onLeave}) {
         {call.status.cls === 'warn' && <div id="status" className="warn">{call.status.text}</div>}
         {!panel && shared && <BookBar shared={shared} books={books} onTurn={p => setShared(shared.id, p)} onPick={() => setPicking(true)} />}
         <nav id="bar">
+          <Control id="muteBtn" icon={muted ? 'micOff' : 'mic'} on={muted} onClick={toggleMute}>{muted ? 'Unmute' : 'Mute'}</Control>
+          <Control id="cameraBtn" icon={camOff ? 'cameraOff' : 'camera'} on={camOff} onClick={toggleCamera}>Camera</Control>
+          <Control id="bookToggle" icon="book" on={panel} onClick={() => setPanel(v => !v)}>Book</Control>
+          <Control id="leaveBtn" icon="leave" className="leave" onClick={leave}>Leave</Control>
           {/* This screen's own picture: small, beside the buttons, never over anyone else. */}
           <figure id="selfTile" className={`tile self${camOff ? ' camOff' : ''}`} title={self.name}>
             {camOff && <div className="offCard"><span>Off</span></div>}
             <Video id="self" stream={stream} muted />
           </figure>
-          <button id="muteBtn" className={`quiet${muted ? ' on' : ''}`} aria-pressed={muted} onClick={toggleMute}>{muted ? 'Unmute' : 'Mute'}</button>
-          <button id="cameraBtn" className={`quiet${camOff ? ' on' : ''}`} aria-pressed={camOff} onClick={toggleCamera}>{camOff ? 'Camera on' : 'Camera off'}</button>
-          <button id="bookToggle" className={`quiet${panel ? ' on' : ''}`} aria-pressed={panel} onClick={() => setPanel(v => !v)}>Book</button>
-          <button id="leaveBtn" className="quiet" onClick={leave}>Leave</button>
         </nav>
       </div>
       {panel && <BookPanel shared={shared} books={books} booksError={booksError} lk={lk} lib={lib}
-        onOpen={open} onTurn={p => setShared(shared.id, p)} />}
+        onOpen={open} onTurn={(p, label) => setShared(shared.id, p, label)} />}
       {picking && books && (
         <div id="picker" className="overlay" onClick={e => e.target === e.currentTarget && setPicking(false)}>
           <div className="sheet wide">
@@ -184,6 +187,17 @@ function Call({family, self, stream, preview, onLeave}) {
         </div>
       )}
     </main>
+  )
+}
+
+// A call control: a round icon with its name underneath; `on` when its setting is switched on (muted, camera off,
+// book shown).
+function Control({id, icon, on, className = '', onClick, children}) {
+  return (
+    <button id={id} className={`ctl${on ? ' on' : ''} ${className}`} aria-pressed={on} onClick={onClick}>
+      <span className="ic"><Icon name={icon} /></span>
+      <span className="lbl">{children}</span>
+    </button>
   )
 }
 
@@ -212,7 +226,7 @@ function BookBar({shared, books, onTurn, onPick}) {
       {entry?.cover && <img src={entry.cover} alt="" />}
       <button id="pageBadge" className="label" onClick={onPick}>
         <span className="t">{entry?.title || 'A book'}</span>
-        <span className="p">{shared.page === 0 ? 'Cover' : `Page ${shared.page}`}{count ? ` of ${count - 1}` : ''}</span>
+        <span className="p">{shared.label || (shared.page === 0 ? 'Cover' : `Page ${shared.page}${count ? ` of ${count - 1}` : ''}`)}</span>
       </button>
       <button id="barPrev" className="quiet arrow" aria-label="Previous page" disabled={shared.page <= 0} onClick={() => onTurn(shared.page - 1)}>‹</button>
       <button id="barNext" className="quiet arrow" aria-label="Next page" disabled={count != null && shared.page >= count - 1} onClick={() => onTurn(shared.page + 1)}>›</button>
@@ -238,7 +252,7 @@ function BookPanel({shared, books, booksError, lk, lib, onOpen, onTurn}) {
   }, [entry?.id, entry?.at, lk])  // at: a book added in the browser was changed
   useEffect(() => setShelf(false), [shared?.id])
   const pageNo = book ? Math.max(0, Math.min(book.pages.length - 1, shared.page)) : 0
-  const goTo = i => book && onTurn(Math.max(0, Math.min(book.pages.length - 1, i)))
+  const goTo = i => { if (!book) return; const p = Math.max(0, Math.min(book.pages.length - 1, i)); onTurn(p, pageLabel(book, p)) }
   useEffect(() => {
     const onKey = e => {
       if (e.target.tagName === 'INPUT') return
@@ -252,7 +266,7 @@ function BookPanel({shared, books, booksError, lk, lib, onOpen, onTurn}) {
   const showShelf = !shared || shelf || !entry
   const title = showShelf ? 'Pick a book' : book ? (book.collection ? `${book.collection.title}: ${book.title}` : book.title) : `${entry.title}…`
   return (
-    <aside id="book">
+    <aside id="book" className={showShelf ? '' : 'reading'}>
       <header id="bookHead">
         <h2 id="bookTitle">{title}</h2>
         {!showShelf && <button id="shelfBtn" className="quiet" onClick={() => setShelf(true)}>{book?.collection ? 'Contents' : 'All books'}</button>}
@@ -261,14 +275,16 @@ function BookPanel({shared, books, booksError, lk, lib, onOpen, onTurn}) {
       {(error || booksError || !books) && <p id="shelfMsg" className="hint">{error || (booksError ? `The books didn't load (${booksError}).` : 'Loading books…')}</p>}
       {showShelf && books && <Library id="shelf" books={books} current={shared?.id} openCollection={entry?.parent?.id}
         onPick={onOpen} />}
-      {!showShelf && book && <Page book={book} pageNo={pageNo} goTo={goTo}
+      {!showShelf && book && <Page book={book} pageNo={pageNo} goTo={goTo} title={title} onTitle={() => setShelf(true)}
         nextStory={nextStory} onNextStory={() => onOpen(nextStory)} />}
     </aside>
   )
 }
 
 const MIN_TEXT = 22, COMFY_TEXT = 28, MIN_PICTURE = 56
-export function Page({book, pageNo, goTo, nextStory, onNextStory}) {
+// title / onTitle: on a narrow panel the book's title moves into the page-turn row (the header goes), and tapping it
+// opens the shelf.
+export function Page({book, pageNo, goTo, nextStory, onNextStory, title, onTitle}) {
   const page = book.pages[pageNo]
   const readerRef = useRef(), textRef = useRef(), wrapRef = useRef(), stripRef = useRef(), imgRef = useRef()
 
@@ -326,7 +342,10 @@ export function Page({book, pageNo, goTo, nextStory, onNextStory}) {
         <button id="nextStory" className="lamp" onClick={onNextStory}>Next story: {nextStory.storyTitle}</button>}
       <div id="nav">
         <button id="prevBtn" className="quiet arrow" aria-label="Previous page" disabled={pageNo === 0} onClick={() => goTo(pageNo - 1)}>‹</button>
-        <div id="pageNum">{pageLabel(book, pageNo)}</div>
+        <button className="navLabel" disabled={!onTitle} onClick={onTitle}>
+          {title && <span className="navTitle">{title}</span>}
+          <span id="pageNum">{pageLabel(book, pageNo)}</span>
+        </button>
         <button id="nextBtn" className="lamp arrow" aria-label="Next page" disabled={pageNo === book.pages.length - 1} onClick={() => goTo(pageNo + 1)}>›</button>
       </div>
       <div id="strip" ref={stripRef}>

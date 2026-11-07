@@ -141,7 +141,7 @@ details summary { cursor: pointer; color: var(--mist); }
 .tile figcaption { position: absolute; left: 12px; bottom: 12px; padding: 4px 14px; border-radius: 999px;
   background: rgba(14, 30, 25, .72); font-family: var(--serif); font-size: 1.05rem; }
 .tile figcaption .state { font-family: var(--sans); color: var(--mist); font-size: .9rem; }
-.tile.self { flex: none; height: 52px; aspect-ratio: 3 / 4; border-radius: 12px; align-self: center; }
+.tile.self { flex: none; height: 64px; aspect-ratio: 3 / 4; border-radius: 12px; margin-left: 4px; }
 .tile.self video { transform: scaleX(-1); object-fit: cover; }
 #waiting { grid-column: 1 / -1; align-self: center; justify-self: center; display: flex; flex-direction: column; gap: 14px;
   align-items: center; text-align: center; padding: 24px; max-width: 30em; }
@@ -149,10 +149,22 @@ details summary { cursor: pointer; color: var(--mist); }
 #waiting p { color: var(--mist); }
 #status { position: absolute; top: 24px; left: 24px; z-index: 3; padding: 6px 14px; border-radius: 999px; background: rgba(14, 30, 25, .8); }
 #tapToPlay { position: absolute; z-index: 4; left: 50%; top: 40%; transform: translate(-50%, -50%); }
-#bar { display: flex; justify-content: center; gap: 10px; padding-bottom: env(safe-area-inset-bottom); }
-#bar .quiet { flex: 0 1 140px; min-width: 0; padding: 0 6px; font-size: .95rem; line-height: 1.15; background: rgba(30, 59, 51, .9); }
-#bar .quiet.on { background: var(--chalk); color: var(--wall); }
-@media (max-width: 480px) { #bar { gap: 6px; } }
+/* The call's controls: round icons with their names under them, all the same size, in one row. */
+#bar { display: flex; justify-content: center; align-items: flex-start; gap: clamp(6px, 3vw, 22px); padding-bottom: env(safe-area-inset-bottom); }
+.ctl { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 64px; color: var(--chalk); }
+.ctl .ic { width: 50px; height: 50px; border-radius: 50%; display: grid; place-items: center; background: var(--wall-3); }
+.ctl .lbl { font-size: .8rem; line-height: 1.1; white-space: nowrap; color: var(--mist); }
+.ctl.on .ic { background: var(--chalk); color: var(--wall); }
+.ctl.on .lbl { color: var(--chalk); }
+.ctl.leave .ic { background: var(--warn); color: #3a1d0c; }
+.ctl:hover .ic { filter: brightness(1.12); }
+/* A narrow video area (a phone on its side, beside the page): smaller controls so the row fits. */
+@container (max-width: 380px) {
+  #bar { gap: 4px; }
+  .ctl { width: 52px; }
+  .ctl .ic { width: 42px; height: 42px; }
+  .tile.self { height: 48px; margin-left: 0; }
+}
 /* Little room for the video (the page open on a phone): "Waiting" shrinks to a line and a button. */
 @container (max-height: 420px) {
   #waiting { gap: 10px; padding: 8px; }
@@ -171,7 +183,7 @@ details summary { cursor: pointer; color: var(--mist); }
 #bookBar .quiet { border-color: rgba(27, 38, 33, .25); }
 
 /* The page: white, the picture on top, the words large. */
-#book { container-type: size; width: min(46%, 640px); flex-shrink: 0; background: var(--paper); color: var(--ink); display: flex; flex-direction: column;
+#book { container-type: size; width: min(50%, 720px); flex-shrink: 0; background: var(--paper); color: var(--ink); display: flex; flex-direction: column;
   min-height: 0; }
 #book .quiet, #book .storyList button { border-color: rgba(27, 38, 33, .25); }
 #book .hint, #book .library h3 { color: #556860; }
@@ -197,7 +209,16 @@ details summary { cursor: pointer; color: var(--mist); }
 .named { font-weight: 700; }
 #nextStory { margin: 0 18px 8px; align-self: center; }
 #nav { display: flex; align-items: center; gap: 12px; padding: 6px 18px; }
-#nav #pageNum { flex: 1; text-align: center; color: #556860; }
+#nav .navLabel { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; color: #556860; }
+#nav .navLabel:disabled { opacity: 1; }
+.navTitle { display: none; font-family: var(--serif); color: var(--ink); max-width: 100%; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; font-size: 1.05rem; }
+/* A narrow page panel: the header goes and the title sits between the arrows (tap it for the shelf). */
+@container (max-width: 480px) {
+  #book.reading #bookHead { display: none; }
+  #book.reading .navTitle { display: block; }
+  #book.reading #pageImg { margin-top: 12px; }
+}
 #strip { display: flex; gap: 8px; overflow-x: auto; padding: 6px 18px 14px; scroll-snap-type: x proximity; }
 #strip img { height: clamp(44px, 8vmin, 84px); border-radius: 4px; border: 3px solid transparent; cursor: pointer; scroll-snap-align: center; }
 #strip img.cur { border-color: var(--lamp); }
@@ -209,7 +230,12 @@ details summary { cursor: pointer; color: var(--mist); }
 }
 /* An upright tablet has room for both: more for the video than on a phone. */
 @media (max-aspect-ratio: 4/5) and (min-width: 600px) { #call.withBook #book { height: 52%; } }
-@media (max-height: 520px) { .tile.self { height: 44px; } }
+@media (max-height: 520px) {
+  .tile.self { height: 52px; }
+  .ctl .ic { width: 44px; height: 44px; }
+  /* A phone on its side: the page gets more of the width. */
+  #book { width: 56%; max-width: none; }
+}
 /* A short page panel: the words matter most, so the picture shrinks and the page strip goes (the arrows stay). */
 @container (max-height: 640px) { #strip { display: none; } }
 @container (max-height: 520px) {

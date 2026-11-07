@@ -7,3 +7,4 @@ chunks/
 .env
 node_modules/
 tests/out/
+tests/cleo.y4m

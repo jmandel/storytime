@@ -67,8 +67,10 @@ Everyone in the family room sees everyone else in a grid (`#grid`, one tile per 
 the whole picture: a phone on a stand sends a tall one, and cropping it loses the child or the book). This device's
 own video is a small thumbnail at the start of the button bar, never over anyone else. There are no sides. "Join the call" on home goes straight in (the tap
 allows sound); a freshly opened `#call` asks for one Join tap, so a reload never turns a camera on by itself.
-Leaving (or Back, which asks "Leave the call?") goes home. The bar: Mute, Camera off (the others see the name instead of
-a black picture; the hello carries `camOff`), Book (show or hide the page on this screen only), Leave.
+Leaving (or Back, which asks "Leave the call?") goes home. The bar (`Control`, `src/components/Icon.jsx`): round icons
+with their names under them, one row, never wrapping, lit when switched on: Mute, Camera (the others see the name
+instead of a black picture; the hello carries `camOff`), Book (show or hide the page on this screen only), Leave,
+then this screen's own small picture.
 
 The open book is shared (`useSharedBook`): `{id, page, at, by}`; anyone can open a book or turn a page, every screen
 follows, the newest change wins, and someone joining is sent what is open. Each screen chooses how much book to show
@@ -78,8 +80,10 @@ book). Hiding the page never leaves the shared book: the bar keeps following, an
 current page. On a tall phone the panel goes under the video. The words come first: `Page` fits them as large as they go; if that is
 under a comfortable size it shrinks the picture (down to a strip that still shows which page it is) before making
 the words smaller or scrolling. The page strip goes when the panel is short (container queries on `#book`). Split:
-side by side when there is width (a tablet sideways); stacked otherwise, the page taking 52% on an upright tablet
-and 70% on a phone.
+side by side when there is width (a tablet or phone sideways; the page up to half, 56% on a phone); stacked otherwise,
+the page taking 52% on an upright tablet and 70% on a phone. On a narrow panel (under 480px) the title moves into
+the page-turn row and tapping it opens the shelf. The shared book carries the page's printed label, so the slim bar
+shows "Pages 162–163" like the page panel.
 
 How screens find each other (`src/lib/call.js`): every screen says hello every 4 s (name, device id, when it joined,
 foreground or not, whose video is reaching it). Screens that stop saying hello drop out of the grid. Another tab or
@@ -312,9 +316,12 @@ Build, serve the folder locally and run the tests (Chromium with a fake camera; 
                                                 # collections, public, viewer (+ PDF), addbook (add, order, turn,
                                                 # words, export, passed in a call, changes, removal), back, tabs, recover
     STORYTIME_LIB=books-test/ node tests/books.mjs   # same with a big test library, if you made one
-    node tests/screens.mjs                      # screenshots of every screen at six sizes -> tests/out/
+    node tests/screens.mjs [filter]             # screenshots on real device sizes (iPhone SE/15, Pixel, Pixel with
+                                                # large text, iPad mini/iPad/Pro, laptops; upright and sideways),
+                                                # with a tall picture from the child's phone -> tests/out/
 
-After any layout change, look at the `tests/out/` screenshots for every size; don't assume. To try it on real
+After any layout change, look at the `tests/out/` screenshots for every device; don't assume. Check: the controls
+fit on one line, the words of a short page fit without scrolling, the child's whole picture shows, nothing overlaps. To try it on real
 devices during development, expose the local server over HTTPS (camera access needs HTTPS), e.g. Tailscale
 Funnel, and open `preview.html#f=<family key>` (two people in one call) or the family link.
 
