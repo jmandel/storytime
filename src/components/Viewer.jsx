@@ -1,26 +1,38 @@
 // Look at a book without a call: the same page view the reader gets, full screen, with a PDF download.
 import {useEffect, useState} from 'react'
 import {Page} from './Call.jsx'
-import {entriesById, openBook, useLibrary} from '../lib/library.js'
-import {go} from '../lib/links.js'
+import {entriesById, openBook, useFamilyBooks} from '../lib/library.js'
+import {go, goReplace} from '../lib/links.js'
 import {downloadPdf} from '../lib/pdf.js'
-import {SETUP, useStored} from '../lib/store.js'
+import {removeLocalBook} from '../lib/localbooks.js'
+import {useStored} from '../lib/store.js'
+import {FAMILY} from '../lib/family.js'
 
-// A book on its own page (#view=<id>), opened in a new tab from the start screen; the library key comes from this
-// device's saved setup.
+// A book on its own page (#view=<id>), opened from the home screen; the books are this device's family's.
 export function ViewRoute({id}) {
-  const setup = useStored(SETUP)
-  const {books, error} = useLibrary(setup?.lk, setup?.lib)
+  const family = useStored(FAMILY)
+  const {books, error, lk, lib} = useFamilyBooks(family)
   const entry = books && entriesById(books).get(id)
   useEffect(() => { document.title = entry ? `${entry.title} - Storytime` : 'Storytime' }, [entry?.title])
-  if (!books) return <section className="screen on center"><p>Loading…</p></section>
+  const close = () => history.state?.storytime ? history.back() : go('')
+  if (!books) return <main className="screen center"><p className="hint">Loading…</p></main>
   if (!entry || entry.collection) return (
-    <section className="screen on center">
-      <p>{error ? `Couldn't open the books (${error}).` : "This book isn't in the library on this device."}</p>
-      <button className="ghost" onClick={() => go('')}>All books</button>
-    </section>
+    <main className="screen center">
+      <p>{error ? `The books didn't load (${error}).` : "This book isn't in this family's library."}</p>
+      <button className="quiet" onClick={() => go('')}>All books</button>
+    </main>
   )
-  return <Viewer entry={entry} books={books} lk={setup?.lk} lib={setup?.lib} page onClose={() => go('')} />
+  return <Viewer entry={entry} books={books} lk={lk} lib={lib} page onClose={close} />
+}
+
+// A book added in the browser, as a file: its book.json with the pictures inside. tools/unpack-book.mjs turns it into
+// a book folder (book.json + page-NN.jpg) to polish and pack like any other.
+function exportBook(book) {
+  const {f, local, at, by, cover, ...rest} = book
+  const blob = new Blob([JSON.stringify({...rest, pages: rest.pages.map(({thumb, ...p}) => p)})], {type: 'application/json'})
+  const a = Object.assign(document.createElement('a'), {href: URL.createObjectURL(blob), download: `${book.id}.storytime.json`})
+  a.click()
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000)
 }
 
 export function Viewer({entry, books, lk, lib, onClose, page: standalone}) {
@@ -57,16 +69,24 @@ export function Viewer({entry, books, lk, lib, onClose, page: standalone}) {
   }
 
   return (
-    <div id="viewer" className={standalone ? 'screen on' : 'overlay on'}>
-      <div id="book" className="viewer">
-        <div id="bookHead">
-          <div id="bookTitle">{book ? current.title : `${current.title}…`}</div>
-          <button id="downloadBtn" className="ghost" disabled={!book || !!busy} onClick={download}>{busy || 'Download PDF'}</button>
-          <button id="viewerClose" className="ghost" onClick={onClose}>{standalone ? 'All books' : 'Close'}</button>
-        </div>
-        {error && <div id="shelfMsg">Couldn't open it ({error}).</div>}
+    <main id="viewer" className={standalone ? 'screen' : 'overlay'}>
+      <aside id="book" className="viewer">
+        <header id="bookHead">
+          <h2 id="bookTitle">{book ? current.title : `${current.title}…`}</h2>
+          {current.local && <>
+            <button id="changeBtn" className="quiet" onClick={() => go(`add=${encodeURIComponent(current.id)}`)}>Change</button>
+            <button id="exportBtn" className="quiet" disabled={!book} onClick={() => exportBook(book)}>Export</button>
+            <button id="removeBtn" className="quiet danger" onClick={async () => {
+              if (!confirm(`Remove ${current.title} from the family's books? It goes from everyone's devices too.`)) return
+              await removeLocalBook(current.f, current.id); goReplace('')
+            }}>Remove</button>
+          </>}
+          <button id="downloadBtn" className="quiet" disabled={!book || !!busy} onClick={download}>{busy || 'Download PDF'}</button>
+          <button id="viewerClose" className="quiet" onClick={onClose}>{standalone ? 'All books' : 'Close'}</button>
+        </header>
+        {error && <p id="shelfMsg" className="hint">It didn't open ({error}).</p>}
         {book && <Page book={book} pageNo={pageNo} goTo={goTo} nextStory={next} onNextStory={() => setCurrent(next)} />}
-      </div>
-    </div>
+      </aside>
+    </main>
   )
 }

@@ -1,11 +1,12 @@
-// The video call: join the Trystero room named in the link, exchange camera streams, and pass small 'book'
-// messages. Each attempt to join uses a fresh copy of the Trystero module, so it gets new relay connections and a new
+// The family call: join the family's Trystero room (named by the family key), exchange camera streams with everyone
+// there, and pass small 'book' messages. Each attempt to join uses a fresh copy of the Trystero module, so it gets new relay connections and a new
 // peer id: rejoining with the old ones can't work (a relay socket can die quietly, e.g. while the phone was in
-// Messages sending the link, and the other side keeps a dead connection to the old id). A screen without the other
-// side's video tries again by itself (see tick()). Only a wrong call secret, which retrying can't fix, is shown as an
+// Messages sending the link, and the other side keeps a dead connection to the old id). A screen missing someone's
+// video tries again by itself (see tick()). Only a wrong call secret, which retrying can't fix, is shown as an
 // error.
 import {useEffect, useRef, useState} from 'react'
 import {fromB64url} from './links.js'
+import {roomOf, secretOf} from './family.js'
 
 // Checked 2026-10-12 by tests/recover.mjs-style runs; offchain.pub was dropped for refusing our messages.
 const DEFAULT_RELAYS = [
@@ -18,11 +19,11 @@ const DEFAULT_RELAYS = [
 ]
 const APP_ID = 'storytime-jmandel-v1'
 
-function config(params) {
-  const cfg = {appId: APP_ID, password: params.get('k')}
-  const relay = params.get('relay')
+function config(family, password) {
+  const cfg = {appId: APP_ID, password}
+  const relay = family.relay
   cfg.relayConfig = {urls: relay ? relay.split(',') : DEFAULT_RELAYS}
-  const turn = params.get('turn')
+  const turn = family.turn
   if (turn) cfg.turnConfig = JSON.parse(new TextDecoder().decode(fromB64url(turn)))
   return cfg
 }
@@ -42,161 +43,108 @@ function retire(lib, room) {
   Object.values(lib.getRelaySockets()).forEach(s => { try { s.close() } catch {} })
 }
 
-// Whether the call goes directly between the devices or through a TURN relay.
-async function connectionPath(pc) {
-  const stats = await pc.getStats()
-  let pair
-  stats.forEach(s => { if (s.type === 'transport' && s.selectedCandidatePairId) pair = stats.get(s.selectedCandidatePairId) })
-  if (!pair) stats.forEach(s => { if (s.type === 'candidate-pair' && s.nominated && s.state === 'succeeded') pair = s })
-  if (!pair) return null
-  const relayed = [stats.get(pair.localCandidateId), stats.get(pair.remoteCandidateId)].some(c => c?.candidateType === 'relay')
-  return relayed ? 'through relay' : 'direct'
-}
-
-// Every screen in the room says hello every few seconds: its side ('reader' or 'child'), when it joined, whether
-// it is in the foreground, and whether it is receiving our video. That lets each screen:
-//  - show the right person: the other side's screen (in the foreground, longest in the call), never a second copy
-//    of its own side (e.g. the parent opening the link meant for the reader);
-//  - notice a second copy of its own side: a background copy steps aside for one in the foreground; otherwise the
-//    newer copy asks what to do ({conflict}) and takes over only when told to (takeOver());
-//  - repair a one-way call: if the other side keeps reporting that our video isn't arriving, join again.
+// Every screen in the family room says hello every few seconds: who it is (name, and a device id so two tabs on one
+// device can tell), when it joined, whether it is in the foreground, and which screens' video is reaching it. That
+// lets each screen:
+//  - show everyone else who is still saying hello (a screen that was closed or reloaded can linger for a while);
+//  - notice a second tab of its own device: the newest one in the foreground keeps the call, the other steps aside;
+//  - repair a one-way connection: if someone keeps reporting that our video isn't arriving, join again.
 const HELLO_MS = 4000
-const role = params => params.get('as') === 'reader' ? 'reader' : 'child'
 
-// handlers: {onPeerJoin(id), onMessage(msg)}, read through a ref so they can change between renders.
-// claim: this screen was told to take the call ("Use this screen"), so other copies of its side step aside.
-// Returns {status: {text, cls}, remote: MediaStream|null, connected, seeing (its video is arriving), send(msg, targetId?),
-// conflict, replaced, takeOver(), retry()}.
-export function useCall(params, stream, handlers, {claim = false} = {}) {
+// people: [{id, name, stream, live (video arriving), since}] in the order they joined, not including this screen.
+// handlers: {onPeerJoin(id), onMessage(msg, id)}, read through a ref so they can change between renders.
+// Returns {status: {text, cls}, people, alone, send(msg, targetId?), replaced, retry()}.
+export function useCall(family, self, stream, handlers) {
   const handlersRef = useRef(handlers)
   handlersRef.current = handlers
-  const [status, setStatus] = useState({text: 'Waiting', cls: ''})
-  const [remote, setRemote] = useState(null)
-  const [conflict, setConflict] = useState(false)
+  const [status, setStatus] = useState({text: 'Joining…', cls: ''})
+  const [people, setPeople] = useState([])
   const [replaced, setReplaced] = useState(false)
-  const [seeing, setSeeing] = useState(false)
-  const api = useRef({send: () => {}, takeOver: () => {}, retry: () => {}, peerId: null})
+  const api = useRef({send: () => {}, retry: () => {}})
 
   useEffect(() => {
     let lib, room, hi, helloTimer, visibleTimer, closed = false
     let selfId = ''
-    let lastJoin = 0, lastGood = Date.now(), hiddenAt = 0, everConnected = false, passwordErrors = 0, path = ''
+    let lastJoin = 0, lastGood = Date.now(), hiddenAt = 0, everConnected = false, passwordErrors = 0
     const joins = []  // when each attempt started, for "still trying"
     const state = api.current
-    const me = {role: role(params), since: Date.now(), inst: Math.random().toString(36).slice(2)}
-    const peers = new Map()  // peer id -> {role, since, inst, hidden, got, stream, joinedAt, seen, missed, sendTimer}
+    const me = {name: self.name, device: self.device, since: Date.now(), inst: Math.random().toString(36).slice(2)}
+    const peers = new Map()  // peer id -> {name, device, since, hidden, got: [ids], stream, joinedAt, seen, missed, sendTimer}
     const peer = id => peers.get(id) || peers.set(id, {joinedAt: Date.now(), missed: 0}).get(id)
     window.__storytimeCall = {me, peers, state, joins}  // for tests and debugging
-    const older = (a, b) => a.since < b.since || (a.since === b.since && a.inst < b.inst)
 
-    // The other side's screen to show: one that is still saying hello (a screen that was closed or reloaded can
-    // linger for a while without saying goodbye), with video arriving, in the foreground, then the one in the call
-    // longest. A screen that hasn't said hello yet might be a second copy of our own side, so it waits a few seconds
-    // (an older version of the app never says hello, and still counts after that).
     const quiet = p => p.seen && Date.now() - p.seen > 2.5 * HELLO_MS
     const live = p => !!p?.stream?.getVideoTracks().some(t => t.readyState === 'live' && !t.muted)
-    const otherSide = p => p.role ? p.role !== me.role : Date.now() - p.joinedAt > 5000
-    const rank = p => [quiet(p) ? 1 : 0, live(p) ? 0 : 1, p.hidden ? 1 : 0, p.since ?? 0]
-    const better = (a, b) => { const x = rank(a), y = rank(b); for (let i = 0; i < x.length; i++) if (x[i] !== y[i]) return x[i] < y[i]; return false }
-    function choose() {
-      let best = null
-      for (const [id, p] of peers) {
-        if (!p.stream || !otherSide(p)) continue
-        if (!best || better(p, peers.get(best))) best = id
-      }
-      if (best !== state.peerId) {
-        state.peerId = best
-        path = ''
-        setRemote(best ? peers.get(best).stream : null)
-        if (best) findPath(best)
-      }
-      showStatus()
-    }
-    // "Connected" only once the other side's video is actually arriving: a connection can be up while its video
-    // never comes.
-    function showStatus() {
+    // Others: everyone but a second tab of this device and screens that went quiet.
+    const others = () => [...peers.entries()].filter(([, p]) => p.device !== me.device && !quiet(p))
+    function show() {
       if (closed) return
-      const p = state.peerId && peers.get(state.peerId)
-      setSeeing(live(p))
-      if (live(p)) return setStatus({text: path ? `Connected (${path})` : 'Connected', cls: 'ok'})
+      const list = others().filter(([, p]) => p.stream || p.name)
+        .sort(([, a], [, b]) => (a.since ?? a.joinedAt) - (b.since ?? b.joinedAt))
+        .map(([id, p]) => ({id, name: p.name || '', stream: p.stream || null, live: live(p), since: p.since}))
+      setPeople(list)
       const recent = joins.filter(t => Date.now() - t < 180000).length
+      if (list.some(p => p.live)) return setStatus({text: '', cls: 'ok'})
       if (recent > 4) return setStatus({text: 'Having trouble connecting. Still trying…', cls: 'warn'})
-      const here = [...peers.values()].some(q => q.role ? q.role !== me.role : true)
-      setStatus({text: p || here ? 'Connecting…' : 'Waiting', cls: ''})
-    }
-    async function findPath(id) {
-      for (let i = 0; i < 10 && state.peerId === id && !closed; i++) {
-        const pc = room.getPeers()[id]
-        const found = pc && await connectionPath(pc)
-        if (found && state.peerId === id) { path = found; return showStatus() }
-        await new Promise(r => setTimeout(r, 1000))
-      }
+      setStatus({text: list.length ? 'Connecting…' : 'Waiting for the family', cls: ''})
     }
 
     function stepAside() {
       closed = true
       clearInterval(helloTimer); clearTimeout(visibleTimer)
       retire(lib, room)
-      state.peerId = null
-      setRemote(null)
-      setConflict(false)
+      setPeople([])
       setReplaced(true)
     }
 
     function hello(target) {
       if (!hi) return
-      // got: frames are actually arriving (a connection can be up with its video track muted).
-      const send = id => hi.send({...me, hidden: document.hidden, got: live(peers.get(id))}, {target: id})
-      if (target) send(target)
-      else for (const id of Object.keys(room.getPeers())) send(id)
+      const got = [...peers.entries()].filter(([, p]) => live(p)).map(([id]) => id)
+      const msg = {...me, hidden: document.hidden, got}
+      if (target) hi.send(msg, {target})
+      else for (const id of Object.keys(room.getPeers())) hi.send(msg, {target: id})
     }
     function onHello(msg, id) {
-      if (msg?.takeOver) return msg.role === me.role ? stepAside() : undefined
       const p = peer(id)
-      Object.assign(p, {role: msg.role, since: msg.since, inst: msg.inst, hidden: msg.hidden, seen: Date.now()})
-      if (p.role === me.role) {
-        // Two copies of the same side. A background copy gives way to a foreground one; otherwise the newer one
-        // asks (it may be the parent who opened the reader's link by mistake).
-        if (claim && !document.hidden) hi.send({role: me.role, takeOver: true}, {target: id})
-        else if (document.hidden && !p.hidden) return stepAside()
-      } else {
-        // The other side says our video isn't reaching them (after a grace period). Not while we're in the
-        // background, where the phone may pause the camera on purpose.
-        p.missed = msg.got === false && !document.hidden && Date.now() - p.joinedAt > 10000 ? p.missed + 1 : 0
-        if (p.missed >= 3) return rejoin()
+      Object.assign(p, {name: msg.name, device: msg.device, since: msg.since, inst: msg.inst, hidden: msg.hidden, seen: Date.now()})
+      handlersRef.current.onPerson?.(msg.name)
+      if (p.device === me.device) {
+        // Another tab of this device: the newest one in the foreground keeps the call.
+        const newer = p.since > me.since || (p.since === me.since && p.inst > me.inst)
+        if (document.hidden && !p.hidden) return stepAside()
+        if (newer && !p.hidden) return stepAside()
+        return show()
       }
-      checkConflict()
-      choose()
+      // They say our video isn't reaching them (after a grace period); not while we're in the background, where the
+      // phone may pause the camera on purpose.
+      const missing = Array.isArray(msg.got) && !msg.got.includes(selfId)
+      p.missed = missing && !document.hidden && Date.now() - p.joinedAt > 10000 ? p.missed + 1 : 0
+      if (p.missed >= 3) return rejoin()
+      show()
     }
-    let conflictNow = false
-    const checkConflict = () => setConflict(conflictNow =
-      !document.hidden && [...peers.values()].some(p => p.role === me.role && !p.hidden && !quiet(p) && older(p, me)))
 
-    // Every few seconds: say hello, and if the other side's video isn't arriving, try again with fresh connections.
-    // With the other side here but no video, after 20 s; with nobody here, every 45 s (they may not have opened the
-    // link yet, or our relay connections may have died quietly, so nobody could find us). Not in the background,
-    // where timers are slowed and the camera may be paused; coming back checks straight away (onVisible).
+    // Every few seconds: say hello, and if someone's video isn't arriving, try again with fresh connections. With
+    // someone here but their video missing, after 20 s; with nobody here, every 45 s (they may be waiting behind
+    // dead relay connections). Not in the background, where timers are slowed and the camera may be paused.
     function tick() {
-      hello(); checkConflict(); choose()
+      hello(); show()
       const now = Date.now()
-      if (live(peers.get(state.peerId))) { lastGood = now; everConnected = true; return }
-      if (document.hidden || conflictNow) return
-      const here = [...peers.values()].some(p => otherSide(p) && !quiet(p))
-      if (now - Math.max(lastGood, lastJoin) > (here ? 20000 : 45000)) rejoin()
+      const here = others()
+      if (here.length && here.every(([, p]) => live(p))) { lastGood = now; everConnected = true; return }
+      if (document.hidden) return
+      if (now - Math.max(lastGood, lastJoin) > (here.length ? 20000 : 45000)) rejoin()
     }
 
     async function connect() {
       lastJoin = Date.now()
       joins.push(lastJoin)
-      const copy = await loadTrystero()
+      const [copy, roomName, password] = await Promise.all([loadTrystero(), roomOf(family.f, family.room), secretOf(family.f)])
       if (closed) return
       lib = copy
       selfId = lib.selfId
       peers.clear()
-      state.peerId = null
-      setRemote(null)
-      showStatus()
-      const myRoom = room = lib.joinRoom(config(params), params.get('r'), {
+      show()
+      const myRoom = room = lib.joinRoom(config(family, password), roomName, {
         onJoinError: d => {
           if (myRoom !== room) return
           // A wrong secret can't be fixed by trying again; but a single garbled message can look the same, so only
@@ -204,29 +152,21 @@ export function useCall(params, stream, handlers, {claim = false} = {}) {
           if (/password/i.test(d.error || '') && !everConnected && ++passwordErrors >= 3) {
             closed = true
             retire(lib, room)
-            return setStatus({text: "Can't join: this link doesn't match the call", cls: 'warn'})
+            return setStatus({text: "Can't join: this family link doesn't match", cls: 'warn'})
           }
-          // A failed connection to some other screen (an old copy, a stale tab) while the call works: ignore it.
-          if (live(peers.get(state.peerId))) return
+          if (others().some(([, p]) => live(p))) return  // a stale screen failing while the call works: ignore
           rejoin()
         },
       })
       const action = room.makeAction('book')
       state.send = (msg, target) => action.send(msg, target ? {target} : undefined)
-      // Book messages only from the screen we're showing (or anyone, before one is chosen).
-      action.onMessage = (msg, from) => {
-        const id = from?.peerId ?? from
-        if (!state.peerId || id === state.peerId) handlersRef.current.onMessage?.(msg)
-      }
+      action.onMessage = (msg, from) => handlersRef.current.onMessage?.(msg, from?.peerId ?? from)
+      state.action = name => room.makeAction(name)
       hi = room.makeAction('hello')
       hi.onMessage = (msg, from) => onHello(msg, from?.peerId ?? from)
-      state.takeOver = () => {
-        hi.send({role: me.role, takeOver: true})
-        setConflict(conflictNow = false)
-      }
-      // Cameras go one way at a time: if both screens add theirs at the same moment the two renegotiations can
-      // collide and one direction is lost. The screen with the lower id sends first; the other sends when that
-      // video arrives (or after a few seconds, in case it never does).
+      // Cameras go one way at a time per pair: if both screens add theirs at the same moment the two
+      // renegotiations can collide and one direction is lost. The lower id sends first; the other when that video
+      // arrives (or after a few seconds, in case it never does).
       const sent = new Set()
       const sendCamera = id => { if (sent.has(id) || myRoom !== room) return; sent.add(id); room.addStream(stream, {target: id}) }
       room.onPeerJoin = id => {
@@ -235,22 +175,22 @@ export function useCall(params, stream, handlers, {claim = false} = {}) {
         else p.sendTimer = setTimeout(() => sendCamera(id), 4000)
         hello(id)
         handlersRef.current.onPeerJoin?.(id)
-        showStatus()
+        show()
       }
       room.onPeerStream = (s, id) => {
         clearTimeout(peer(id).sendTimer)
         sendCamera(id)
         peer(id).stream = s
-        s.getVideoTracks().forEach(t => t.addEventListener('unmute', choose))
-        choose()
+        s.getVideoTracks().forEach(t => t.addEventListener('unmute', show))
+        show()
       }
       room.onPeerLeave = id => {
         clearTimeout(peers.get(id)?.sendTimer)
         sent.delete(id)
         peers.delete(id)
-        checkConflict()
-        choose()
+        show()
       }
+      handlersRef.current.onRoom?.(room)
       clearInterval(helloTimer)
       helloTimer = setInterval(tick, HELLO_MS)
     }
@@ -268,7 +208,8 @@ export function useCall(params, stream, handlers, {claim = false} = {}) {
     state.retry = () => { lastJoin = 0; rejoin() }
 
     // Back from the background (e.g. after sending the link from Messages): relay sockets may have died while the
-    // page was frozen, so without the other side's video, join again now rather than waiting.
+    // page was frozen, so unless everyone's video is arriving, join again now rather than waiting.
+    const allLive = () => { const h = others(); return h.length > 0 && h.every(([, p]) => live(p)) }
     const onVisible = () => {
       if (closed) return
       if (document.hidden) { hiddenAt = Date.now(); return }
@@ -276,15 +217,15 @@ export function useCall(params, stream, handlers, {claim = false} = {}) {
       const away = hiddenAt && Date.now() - hiddenAt > 10000
       hiddenAt = 0
       clearTimeout(visibleTimer)
-      visibleTimer = setTimeout(() => { if (!live(peers.get(state.peerId)) && !conflictNow) { lastJoin = 0; rejoin() } }, away ? 1500 : 6000)
+      visibleTimer = setTimeout(() => { if (!allLive()) { lastJoin = 0; rejoin() } }, away ? 1500 : 6000)
     }
-    const onOnline = () => !closed && !live(peers.get(state.peerId)) && (lastJoin = 0, rejoin())
+    const onOnline = () => !closed && !allLive() && (lastJoin = 0, rejoin())
     // The camera stopped for good (another app took it): reload to get it back.
     const onEnded = () => !closed && restart()
     function restart() {
       closed = true
       retire(lib, room)
-      if (!markRestart(params, claim)) return setStatus({text: 'The camera stopped. Leave and start the call again.', cls: 'warn'})
+      if (!markRestart()) return setStatus({text: 'The camera stopped. Leave and join again.', cls: 'warn'})
       setStatus({text: 'Reconnecting…', cls: ''})
       setTimeout(() => location.reload(), 500)
     }
@@ -300,18 +241,14 @@ export function useCall(params, stream, handlers, {claim = false} = {}) {
       clearTimeout(visibleTimer)
       clearInterval(helloTimer)
       state.send = () => {}
-      state.takeOver = () => {}
       state.retry = () => {}
-      state.peerId = null
       retire(lib, room)
     }
-  }, [params.get('r'), params.get('k'), stream])
+  }, [family.f, stream])
 
   return {
-    status, remote, conflict, replaced,
-    connected: !!remote, seeing,
+    status, people, replaced, alone: !people.some(p => p.live),
     send: (msg, target) => api.current.send(msg, target),
-    takeOver: () => api.current.takeOver(),
     retry: () => api.current.retry(),
   }
 }
@@ -319,26 +256,18 @@ export function useCall(params, stream, handlers, {claim = false} = {}) {
 // Restarts are remembered for the tab (sessionStorage) so the reloaded page rejoins without asking again; more than
 // 4 in 3 minutes means something else is wrong, so stop and say so.
 const RESTARTS = 'storytime-restarts'
-function markRestart(params, claim) {
+export function markRestart() {
   let list = []
   try { list = JSON.parse(sessionStorage.getItem(RESTARTS)) || [] } catch {}
-  list = list.filter(x => x.r === params.get('r') && Date.now() - x.at < 180000)
+  list = list.filter(at => Date.now() - at < 180000)
   if (list.length >= 4) return false
-  list.push({r: params.get('r'), at: Date.now(), claim})
+  list.push(Date.now())
   try { sessionStorage.setItem(RESTARTS, JSON.stringify(list)) } catch { return false }
   return true
 }
-// Whether this page load is a restart of the call in the link (so join straight away), and whether it was claiming.
-export function restartPending(params) {
-  try {
-    const list = JSON.parse(sessionStorage.getItem(RESTARTS)) || []
-    const last = list.filter(x => x.r === params.get('r')).at(-1)
-    return last && Date.now() - last.at < 30000 ? {claim: !!last.claim} : null
-  } catch { return null }
-}
-// "Use this screen": reload as a new participant that takes the call from other copies of this side.
-export function claimCall(params) {
-  if (markRestart(params, true)) location.reload()
+// Whether this page load is a restart of the call (so join straight away).
+export function restartPending() {
+  try { return (JSON.parse(sessionStorage.getItem(RESTARTS)) || []).some(at => Date.now() - at < 30000) } catch { return false }
 }
 
 // Keep the screen on during a call.

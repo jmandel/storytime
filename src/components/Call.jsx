@@ -1,42 +1,30 @@
-// A call: join screen, then the video stage. The reader's side adds the book panel; the child's side (the phone on
-// the stand) gets small book controls. The reader's tablet is the authority on the open book and page; the phone
-// asks for changes ({want}) and shows what the tablet reports.
+// The family call: everyone in the family room, in a grid, and the book they're reading together. The open book and
+// page are shared (anyone can change them, every screen follows, the latest change wins); each screen chooses how much
+// of it to show: the page panel (picture and words; the default on a tablet or laptop) or a slim bar (title, page and
+// arrows; the default on a phone, e.g. on the stand filming the child).
 import {useEffect, useLayoutEffect, useRef, useState} from 'react'
 import {Library} from './Library.jsx'
 import {SpeakerText} from './SpeakerText.jsx'
-import {claimCall, restartPending, useCall, useWakeLock} from '../lib/call.js'
-import {entriesById, openBook as fetchBook, pageLabel, useLibrary} from '../lib/library.js'
-import {goReplace, linkWith, shareLink} from '../lib/links.js'
+import {WhoForm} from './Home.jsx'
+import {markRestart, restartPending, useCall, useWakeLock} from '../lib/call.js'
+import {entriesById, openBook as fetchBook, pageLabel, useFamilyBooks} from '../lib/library.js'
+import {goReplace, shareLink} from '../lib/links.js'
 import {leaveCallOnPurpose, useBackLayer} from '../lib/guard.js'
-import {MY_CALL, SETUP, callSide, read, rememberBook, write} from '../lib/store.js'
+import {FAMILY, ME, familyLink, rememberPerson} from '../lib/family.js'
+import {rememberBook, useStored} from '../lib/store.js'
+import {shareBooks} from '../lib/share.js'
+import {onLocalChange} from '../lib/localbooks.js'
 
-// The link to send: the same call with no side (each device works out its own) and without this phone's own
-// settings (tonight's books go over the call instead).
-const sharedLink = params => {
-  const p = new URLSearchParams(params)
-  for (const k of ['as', 'b', 'preview']) p.delete(k)
-  return p
-}
-
-// This call on a given side (when a device guessed its side wrong).
-const sideLink = (params, as) => { const p = sharedLink(params); p.set('as', as); return p }
-
-export function CallRoute({params: linkParams}) {
-  // The side this device is on, decided once: from its saved setup, or the link's as=.
-  const [params] = useState(() => { const p = new URLSearchParams(linkParams); p.set('as', callSide(linkParams)); return p })
+// preview: preview.html's frames share one browser's storage, so each takes its family and name from its address
+// (#call&preview=1&f=<key>&name=<name>) and joins straight away.
+export function CallRoute({preview}) {
+  const [previewAs] = useState(() => preview && {family: {f: preview.get('f'), name: preview.get('n') || ''},
+    self: {name: preview.get('name') || 'Preview', device: Math.random().toString(36).slice(2)}})
+  const savedFamily = useStored(FAMILY), savedSelf = useStored(ME)
+  const family = previewAs?.family || savedFamily
+  const self = previewAs?.self || savedSelf
   const [stream, setStream] = useState(null)
   const [error, setError] = useState('')
-  const [restart] = useState(() => restartPending(params))
-  const isReader = params.get('as') === 'reader'
-  const withName = isReader ? params.get('child') : params.get('reader')
-  useEffect(() => {
-    document.title = withName ? `Storytime with ${withName}` : 'Storytime'  // also the name a home-screen icon gets
-    // The reader's tablet (no setup of its own) remembers its call, so the bare address (a home-screen icon that
-    // lost the link) opens it too.
-    if (isReader && !read(SETUP)) write(MY_CALL, sharedLink(params).toString())
-    return () => { document.title = 'Storytime' }
-  }, [])
-
   const join = async () => {
     setError('')
     try {
@@ -45,27 +33,34 @@ export function CallRoute({params: linkParams}) {
         audio: {echoCancellation: true, noiseSuppression: true, autoGainControl: true},
       }))
     } catch (e) {
-      setError(`Camera or microphone not available: ${e.message}`)
+      setError(`The camera or microphone isn't available (${e.message}).`)
     }
   }
-  useEffect(() => {
-    // Straight in on the parent's device when this page has already been tapped (they pressed Call, so sound can
-    // play); the reader always taps Join, so a reload or a reopened link never turns her camera on by itself.
-    if (params.get('preview') === '1' || restart || (read(SETUP) && navigator.userActivation?.hasBeenActive)) join()
-  }, [])
+  // Straight in when this page has already been tapped ("Join the call" on the home screen) or is reconnecting;
+  // a freshly opened page asks first, so a reload never turns a camera on by itself.
+  const auto = useRef(!!preview || restartPending() || navigator.userActivation?.isActive)
+  useEffect(() => { if (auto.current && family?.f && self?.name) join() }, [!!self?.name])
   useEffect(() => () => stream?.getTracks().forEach(t => t.stop()), [stream])
+  useEffect(() => { document.title = family?.name ? `${family.name} · Storytime` : 'Storytime' }, [family?.name])
 
-  // Leaving on a device without a setup of its own (the reader's tablet) comes back to this Join screen.
-  if (stream) return <Call params={params} stream={stream} claim={!!restart?.claim} onRejoin={() => claimCall(params)}
-    onLeave={read(SETUP) ? null : () => setStream(null)} />
+  if (!family?.f) return (
+    <main className="screen center">
+      <p>This device isn't in a family yet. Open your family link on it first.</p>
+      <button className="quiet" onClick={() => goReplace('')}>Storytime home</button>
+    </main>
+  )
+  if (!self?.name) return <main className="screen center"><WhoForm family={family} /></main>
+  if (stream) return <Call family={family} self={self} stream={stream} preview={!!preview} onLeave={() => setStream(null)} />
   return (
-    <section id="join" className="screen on center">
-      <h1 id="joinTitle">{withName ? `Storytime with ${withName}` : 'Storytime'}</h1>
-      <button id="joinBtn" className="big" onClick={join}>Join</button>
-      <p className="small">This turns on the camera and microphone.</p>
-      {inAppBrowser && <p id="inAppHint" className="warn">If the call doesn't work here, open this link in {/iPhone|iPad/.test(navigator.userAgent) ? 'Safari' : 'Chrome'} instead (⋮ or share menu, then "Open in browser").</p>}
+    <main id="join" className="screen center">
+      <h1 id="joinTitle">{family.name || 'Storytime'}</h1>
+      <p className="lede">Joining as {self.name}</p>
+      <button id="joinBtn" className="lamp big" onClick={join}>Join the call</button>
+      <p className="hint">This turns on the camera and microphone.</p>
+      {inAppBrowser && <p id="inAppHint" className="warn">If the call doesn't work here, open this link in {/iPhone|iPad/.test(navigator.userAgent) ? 'Safari' : 'Chrome'} instead.</p>}
       {error && <p id="joinErr" className="warn">{error}</p>}
-    </section>
+      <button className="quiet" onClick={() => goReplace('')}>Storytime home</button>
+    </main>
   )
 }
 
@@ -73,7 +68,7 @@ export function CallRoute({params: linkParams}) {
 // cameras and calls often don't work.
 const inAppBrowser = /FBAN|FBAV|FB_IAB|Instagram|Line\/|GSA\/|; wv\)/.test(navigator.userAgent)
 
-// onBlocked: the browser refused to start playback (sound needs a tap first, e.g. after a reconnect reloaded the page).
+// onBlocked: the browser refused to start playback (sound needs a tap first).
 function Video({stream, onBlocked, ...props}) {
   const ref = useRef()
   useEffect(() => {
@@ -85,14 +80,39 @@ function Video({stream, onBlocked, ...props}) {
   return <video ref={ref} autoPlay playsInline {...props} />
 }
 
-function Call({params, stream, claim, onRejoin, onLeave}) {
-  const isReader = params.get('as') === 'reader'
-  const reader = params.get('reader') || 'the reader', child = params.get('child') || 'the child'
-  const handlers = useRef({})
-  const call = useCall(params, stream, {
-    onPeerJoin: id => handlers.current.onPeerJoin?.(id),
-    onMessage: msg => handlers.current.onMessage?.(msg),
-  }, {claim})
+// The shared book: {id, page, at, by}. A change here is sent to everyone; a change from anyone else is taken if it is
+// newer. Someone joining is sent what is open.
+function useSharedBook(handlers, call, self) {
+  const [book, setBook] = useState(null)
+  const ref = useRef(null)
+  ref.current = book
+  const take = b => { if (b?.id) rememberBook(b.id); setBook(b) }
+  const newer = (a, b) => !b || a.at > b.at || (a.at === b.at && a.by > b.by)
+  handlers.current.onMessage = msg => { if (msg?.book && newer(msg.book, ref.current)) take(msg.book) }
+  handlers.current.onPeerJoin = id => ref.current && call.send({book: ref.current}, id)
+  const set = (id, page) => {
+    const b = {id, page, at: Math.max(Date.now(), (ref.current?.at || 0) + 1), by: self.device}
+    take(b)
+    call.send({book: b})
+  }
+  return [book, set]
+}
+
+function Call({family, self, stream, preview, onLeave}) {
+  const handlers = useRef({onPerson: rememberPerson})
+  const sharing = useRef(null)  // passes books added in the browser to the others (src/lib/share.js)
+  const call = useCall(family, self, stream, {
+    onPeerJoin: id => { handlers.current.onPeerJoin?.(id); sharing.current?.offer(id) },
+    onMessage: (msg, id) => handlers.current.onMessage?.(msg, id),
+    onPerson: name => handlers.current.onPerson?.(name),
+    onRoom: room => { sharing.current = shareBooks(family.f, room) },
+  })
+  useEffect(() => onLocalChange(() => sharing.current?.offer()), [])
+  const [shared, setShared] = useSharedBook(handlers, call, self)
+  const {books, error: booksError, lk, lib} = useFamilyBooks(family)
+  const [panel, setPanel] = useState(() => innerWidth >= 820)
+  const [picking, setPicking] = useState(false)
+  useBackLayer(picking, () => setPicking(false))
   const [muted, setMuted] = useState(false)
   const [blocked, setBlocked] = useState(false)
   useWakeLock()
@@ -103,227 +123,136 @@ function Call({params, stream, claim, onRejoin, onLeave}) {
     track.enabled = !track.enabled
     setMuted(!track.enabled)
   }
-  const leave = () => onLeave ? onLeave() : (leaveCallOnPurpose(), goReplace(''))
+  const leave = () => { leaveCallOnPurpose(); goReplace(''); onLeave() }
+  const open = entry => { setPicking(false); setShared(entry.id, 0) }
 
-  const childSide = useChildBooks({params, call, handlers, reader, enabled: !isReader})
-  const mySide = isReader ? reader : `${child}'s phone`
   if (call.replaced) return (
-    <section id="moved" className="screen on center">
-      <h1>The call moved to another screen</h1>
-      <p>{mySide[0].toUpperCase() + mySide.slice(1)} opened the call somewhere else, so this screen stepped aside.</p>
-      <button id="useHereBtn" className="big" onClick={onRejoin}>Use this screen</button>
-      <button className="ghost" onClick={leave}>Leave</button>
-    </section>
+    <main id="moved" className="screen center">
+      <h1>The call moved to another window</h1>
+      <p className="lede">This device opened the call somewhere else, so this window stepped aside.</p>
+      <button id="useHereBtn" className="lamp big" onClick={() => { markRestart(); location.reload() }}>Use this window</button>
+      <button className="quiet" onClick={leave}>Leave</button>
+    </main>
   )
+  const people = call.people
   return (
-    <section id="call" className={`screen on${isReader ? ' reader' : ''}`}>
+    <main id="call" className={`screen${panel ? ' withBook' : ''}`}>
       <div id="stage">
-        <Video id="remote" stream={call.remote} muted={params.get('preview') === '1'} onBlocked={() => setBlocked(true)} />
-        {blocked && <button id="tapToPlay" className="big" onClick={() => { document.getElementById('remote').play().catch(() => {}); setBlocked(false) }}>
-          Tap to see and hear {isReader ? child : reader}</button>}
-        {!call.seeing && <Waiting params={params} isReader={isReader} reader={reader} child={child} onRetry={call.retry} />}
-        {call.conflict && (
-          <div id="conflict" className="overlay on">
-            <div className="sheet">
-              {isReader ? <>
-                <h2>{reader[0].toUpperCase() + reader.slice(1)} is already using this link</h2>
-                <p>This link is for {reader}. If you started the call, open your own side instead.</p>
-                <button id="switchSideBtn" onClick={() => goReplace(sideLink(params, 'child'))}>Open {child}'s side</button>
-                <button id="takeOverBtn" className="ghost" onClick={call.takeOver}>I'm {reader}: use this screen</button>
-              </> : <>
-                <h2>This call is already open on another screen</h2>
-                <button id="takeOverBtn" onClick={call.takeOver}>Use this screen</button>
-                <button id="switchReaderBtn" className="ghost" onClick={() => goReplace(sideLink(params, 'reader'))}>I'm {reader}</button>
-                <button className="ghost" onClick={leave}>Leave</button>
-              </>}
-            </div>
-          </div>
-        )}
-        <Video id="self" stream={stream} muted />
-        <div id="status" className={call.status.cls}>{call.status.text}</div>
-        {childSide?.overlay}
-        <div id="bar">
-          <button id="muteBtn" className={`ghost${muted ? ' off' : ''}`} onClick={toggleMute}>{muted ? 'Unmute' : 'Mute'}</button>
-          {childSide?.bookButton}
-          <button id="leaveBtn" className="ghost" onClick={leave}>Leave</button>
+        <div id="grid" data-count={people.length || 1}>
+          {people.map(p => (
+            <figure key={p.id} className={`tile${p.live ? ' live' : ''}`}>
+              <Video className="remote" stream={p.stream} muted={preview} onBlocked={() => setBlocked(true)} />
+              <figcaption>{p.name || 'Joining…'}{!p.live && <span className="state"> · connecting</span>}</figcaption>
+            </figure>
+          ))}
+          {!people.length && <Waiting family={family} status={call.status} onRetry={call.retry} />}
         </div>
+        {blocked && <button id="tapToPlay" className="lamp big" onClick={() => { document.querySelectorAll('video.remote').forEach(v => v.play().catch(() => {})); setBlocked(false) }}>
+          Tap to hear everyone</button>}
+        <figure id="selfTile" className="tile self">
+          <Video id="self" stream={stream} muted />
+          <figcaption>{self.name}{muted ? ' · muted' : ''}</figcaption>
+        </figure>
+        {call.status.cls === 'warn' && <div id="status" className="warn">{call.status.text}</div>}
+        {!panel && shared && <BookBar shared={shared} books={books} onTurn={p => setShared(shared.id, p)} onPick={() => setPicking(true)} />}
+        <nav id="bar">
+          <button id="muteBtn" className={`quiet${muted ? ' on' : ''}`} onClick={toggleMute}>{muted ? 'Unmute' : 'Mute'}</button>
+          <button id="bookToggle" className="quiet" onClick={() => setPanel(v => !v)}>{panel ? 'Hide the book' : shared ? 'Show the words' : 'Books'}</button>
+          <button id="leaveBtn" className="quiet" onClick={leave}>Leave</button>
+        </nav>
       </div>
-      {isReader && <ReaderBook params={params} call={call} handlers={handlers} />}
-      {childSide?.picker}
-    </section>
+      {panel && <BookPanel shared={shared} books={books} booksError={booksError} lk={lk} lib={lib}
+        onOpen={open} onTurn={p => setShared(shared.id, p)} />}
+      {picking && books && (
+        <div id="picker" className="overlay" onClick={e => e.target === e.currentTarget && setPicking(false)}>
+          <div className="sheet wide">
+            <h2>Pick a book</h2>
+            <Library id="pickerShelf" books={books} current={shared?.id} onPick={open} />
+            <button id="pickerClose" className="quiet" onClick={() => setPicking(false)}>Close</button>
+          </div>
+        </div>
+      )}
+    </main>
   )
 }
 
-// Before the other side arrives. The phone that started the call offers the reader's link right here, so sending it
-// never takes the phone out of the call; the reader's side says who it's waiting for, and after a while what to do.
-// After a while both sides offer Try again (the screens also retry by themselves).
-function Waiting({params, isReader, reader, child, onRetry}) {
+// Nobody else here yet: say so, offer the family link, and after a while "Try again".
+function Waiting({family, status, onRetry}) {
   const [long, setLong] = useState(false)
-  const [copied, setCopied] = useState(false)
   useEffect(() => { const t = setTimeout(() => setLong(true), 30000); return () => clearTimeout(t) }, [])
-  const retry = long && <button id="retryBtn" className="ghost" onClick={onRetry}>Try again</button>
-  if (isReader) return (
-    <div id="waiting">
-      <p>Waiting for {child}…</p>
-      {long && <p className="small">Still waiting. The call starts when {child}'s phone opens it. If it's already open, tap Try again.</p>}
-      {retry}
-    </div>
-  )
-  const link = linkWith(sharedLink(params))
-  const title = params.get('child') ? `Storytime with ${params.get('child')}` : 'Storytime'
   return (
     <div id="waiting">
-      <p>Waiting for {reader}.</p>
+      <h2>{status.cls === 'warn' ? status.text : status.text || 'Waiting for the family'}</h2>
+      <p>Anyone who opens the family link joins this call.</p>
       <div className="row">
-        {navigator.share && <button id="shareBtn" onClick={() => shareLink(link, title)}>Send {reader} the link</button>}
-        <button id="copyBtn" className={navigator.share ? 'ghost' : ''} onClick={() => navigator.clipboard.writeText(link).then(() => setCopied(true))}>
-          {copied ? 'Copied' : 'Copy link'}
-        </button>
+        <button id="shareBtn" className="quiet" onClick={() => shareLink(familyLink(family), family.name || 'Storytime')}>Send the family link</button>
+        {long && <button id="retryBtn" className="quiet" onClick={onRetry}>Try again</button>}
       </div>
-      <div id="linkbox">{link}</div>
-      <p className="small">Stay on this screen; the call starts when {reader} opens the link.</p>
-      {retry}
     </div>
   )
 }
 
-// The child's side: shows what the reader's tablet has open, nudges pages, picks books. Returns the pieces (badge
-// and arrows over the video, a Book button in the bar, the picker sheet) rather than one subtree; on the reader's
-// side (enabled false) it returns nothing.
-function useChildBooks({params, call, handlers, reader, enabled}) {
-  const [remoteState, setRemoteState] = useState(null)
-  const [pickerOpen, setPickerOpen] = useState(false)
-  useBackLayer(pickerOpen, () => setPickerOpen(false))
-  const pending = useRef(null)
-  const {books} = useLibrary(params.get('lk'), params.get('lib'))
-  const stack = (params.get('b') || '').split(',').filter(Boolean)
-
-  if (!enabled) return {}
-  handlers.current.onMessage = msg => {
-    if (msg?.want) return
-    if (msg && msg.id !== remoteState?.id) rememberBook(msg.id)
-    setRemoteState(msg)
-  }
-  handlers.current.onPeerJoin = id => {
-    if (stack.length) call.send({stack}, id)  // tonight's books: the reader's tablet opens the first
-    if (pending.current) call.send({want: pending.current}, id)
-    pending.current = null
-  }
-  const want = w => {
-    if (call.connected) call.send({want: w})
-    else pending.current = w  // sent when the reader joins
-  }
-  const cap = reader[0].toUpperCase() + reader.slice(1)
-
-  return {
-    overlay: remoteState && <>
-      <div id="pageBadge">{cap}: {remoteState.title}, {remoteState.label}</div>
-      <div id="childNav">
-        <button id="childPrev" className="ghost" aria-label="Previous page" onClick={() => want({id: remoteState.id, page: remoteState.page - 1})}>◀</button>
-        <button id="childNext" className="ghost" aria-label="Next page" onClick={() => want({id: remoteState.id, page: remoteState.page + 1})}>▶</button>
-      </div>
-    </>,
-    bookButton: books?.length > 0 && <button id="bookBtn" className="ghost" onClick={() => setPickerOpen(true)}>Book</button>,
-    picker: pickerOpen && books && (
-      <div id="picker" className="overlay on" onClick={e => e.target === e.currentTarget && setPickerOpen(false)}>
-        <div id="pickerSheet">
-          <h2>Pick a book</h2>
-          <Library id="pickerShelf" books={books} stack={stack} current={remoteState?.id}
-            onPick={b => { want({id: b.id, page: 0}); setPickerOpen(false) }} />
-          <button id="pickerClose" className="ghost" onClick={() => setPickerOpen(false)}>Close</button>
-        </div>
-      </div>
-    ),
-  }
+// The slim book bar over the video: what's open, which page, arrows, and a way to pick another book.
+function BookBar({shared, books, onTurn, onPick}) {
+  const entry = books && entriesById(books).get(shared.id)
+  const count = entry?.pages
+  return (
+    <div id="bookBar">
+      {entry?.cover && <img src={entry.cover} alt="" />}
+      <button id="pageBadge" className="label" onClick={onPick}>
+        <span className="t">{entry?.title || 'A book'}</span>
+        <span className="p">{shared.page === 0 ? 'Cover' : `Page ${shared.page}`}{count ? ` of ${count - 1}` : ''}</span>
+      </button>
+      <button id="barPrev" className="quiet arrow" aria-label="Previous page" disabled={shared.page <= 0} onClick={() => onTurn(shared.page - 1)}>‹</button>
+      <button id="barNext" className="quiet arrow" aria-label="Next page" disabled={count != null && shared.page >= count - 1} onClick={() => onTurn(shared.page + 1)}>›</button>
+    </div>
+  )
 }
 
-// The reader's side: the shelf, then the open book with its words fitted to the space.
-// Tonight's books come from the phone when it joins ({stack}); an older link may carry them as b=.
-function ReaderBook({params, call, handlers}) {
-  const lk = params.get('lk'), lib = params.get('lib')
-  const [stack, setStack] = useState(() => (params.get('b') || '').split(',').filter(Boolean))
-  const {books, error: listError} = useLibrary(lk, lib)
+// The page panel: the shared book's page (picture and words), or the shelf when nothing is open.
+function BookPanel({shared, books, booksError, lk, lib, onOpen, onTurn}) {
   const [book, setBook] = useState(null)
-  const [pageNo, setPageNo] = useState(0)
-  const [loading, setLoading] = useState(null)
   const [error, setError] = useState('')
-  const [shelfOpen, setShelfOpen] = useState(false)
-  useBackLayer(shelfOpen && !!book, () => setShelfOpen(false))
-  const opened = useRef(false)
-  const busy = useRef(false)  // a book is open or opening: tonight's books arriving later don't replace it
+  const [shelf, setShelf] = useState(false)
+  useBackLayer(shelf && !!shared, () => setShelf(false))
   const byId = entriesById(books)
-  const entry = book && byId.get(book.id)
-  const nextStory = entry?.next && byId.get(entry.next)
-
-  const current = book && !shelfOpen ? {id: book.id, title: book.collection ? `${book.collection.title}: ${book.title}` : book.title, page: pageNo, label: pageLabel(book, pageNo)} : null
-  const currentRef = useRef(current)
-  currentRef.current = current
-
-  const openBook = async (entry, page = 0) => {
-    busy.current = true
-    setShelfOpen(false)
-    setLoading(entry.title)
-    try {
-      const b = await fetchBook(entry, lk, lib)
-      setBook(b)
-      setPageNo(Math.max(0, Math.min(b.pages.length - 1, page)))
-      rememberBook(b.id)
-    } catch (e) {
-      setError(`Couldn't open ${entry.title} (${e.message}).`)
-      setShelfOpen(true)
-    }
-    setLoading(null)
-  }
-  const goTo = i => book && setPageNo(Math.max(0, Math.min(book.pages.length - 1, i)))
-
-  // Open tonight's first book (or the only book) once the list arrives.
+  const entry = shared && byId.get(shared.id)
   useEffect(() => {
-    if (!books || opened.current) return
-    opened.current = true
-    const first = byId.get(stack[0]) || (books.length === 1 && !books[0].collection && books[0])
-    if (first && !first.collection) openBook(first); else setShelfOpen(true)
-  }, [books])
-
-  // Tell the phone what is open whenever it changes, and the phone that just joined.
-  useEffect(() => { call.send(current) }, [current?.id, current?.page])
-  handlers.current.onPeerJoin = id => call.send(currentRef.current, id)
-  handlers.current.onMessage = msg => {
-    if (Array.isArray(msg?.stack)) {
-      setStack(msg.stack)
-      const first = byId.get(msg.stack[0])
-      if (books && !busy.current && first && !first.collection) openBook(first)
-      return
-    }
-    const w = msg?.want
-    if (!w) return
-    if (book && w.id === book.id) return goTo(w.page ?? pageNo)
-    const target = byId.get(w.id)
-    if (target && !target.collection) openBook(target, w.page ?? 0)
-  }
-
+    if (!entry) return
+    let live = true
+    setError('')
+    if (book?.id !== entry.id) setBook(null)
+    fetchBook(entry, lk, lib).then(b => live && setBook(b), e => live && setError(`${entry.title} didn't open (${e.message}).`))
+    return () => { live = false }
+  }, [entry?.id, entry?.at, lk])  // at: a book added in the browser was changed
+  useEffect(() => setShelf(false), [shared?.id])
+  const pageNo = book ? Math.max(0, Math.min(book.pages.length - 1, shared.page)) : 0
+  const goTo = i => book && onTurn(Math.max(0, Math.min(book.pages.length - 1, i)))
   useEffect(() => {
     const onKey = e => {
+      if (e.target.tagName === 'INPUT') return
       if (e.key === 'ArrowRight') goTo(pageNo + 1)
       if (e.key === 'ArrowLeft') goTo(pageNo - 1)
     }
     addEventListener('keydown', onKey)
     return () => removeEventListener('keydown', onKey)
   })
-
-  const title = loading ? `${loading}…` : shelfOpen || !book ? 'Pick a book'
-    : book.collection ? `${book.collection.title} · ${book.title}` : book.title
+  const nextStory = entry?.next && byId.get(entry.next)
+  const showShelf = !shared || shelf || !entry
+  const title = showShelf ? 'Pick a book' : book ? (book.collection ? `${book.collection.title}: ${book.title}` : book.title) : `${entry.title}…`
   return (
-    <div id="book">
-      <div id="bookHead">
-        <div id="bookTitle">{title}</div>
-        <button id="shelfBtn" className="ghost" onClick={() => setShelfOpen(true)}>{book?.collection && !shelfOpen ? 'Contents' : 'All books'}</button>
-      </div>
-      {(error || listError || !books) && <div id="shelfMsg">{error || (listError ? `Couldn't open the books (${listError}).` : 'Loading books…')}</div>}
-      {shelfOpen && books && <Library id="shelf" books={books} stack={stack} current={book?.id}
-        openCollection={book?.collection?.id} onPick={b => { setError(''); openBook(b) }} />}
-      {!shelfOpen && book && <Page book={book} pageNo={pageNo} goTo={goTo}
-        nextStory={nextStory} onNextStory={() => openBook(nextStory)} />}
-    </div>
+    <aside id="book">
+      <header id="bookHead">
+        <h2 id="bookTitle">{title}</h2>
+        {!showShelf && <button id="shelfBtn" className="quiet" onClick={() => setShelf(true)}>{book?.collection ? 'Contents' : 'All books'}</button>}
+        {showShelf && shared && entry && <button id="shelfClose" className="quiet" onClick={() => setShelf(false)}>Back to the book</button>}
+      </header>
+      {(error || booksError || !books) && <p id="shelfMsg" className="hint">{error || (booksError ? `The books didn't load (${booksError}).` : 'Loading books…')}</p>}
+      {showShelf && books && <Library id="shelf" books={books} current={shared?.id} openCollection={entry?.parent?.id}
+        onPick={onOpen} />}
+      {!showShelf && book && <Page book={book} pageNo={pageNo} goTo={goTo}
+        nextStory={nextStory} onNextStory={() => onOpen(nextStory)} />}
+    </aside>
   )
 }
 
@@ -374,11 +303,11 @@ export function Page({book, pageNo, goTo, nextStory, onNextStory}) {
         <div id="moreCue">more ↓</div>
       </div>
       {nextStory && pageNo === book.pages.length - 1 &&
-        <button id="nextStory" className="ghost" onClick={onNextStory}>Next story: {nextStory.storyTitle} ▶</button>}
+        <button id="nextStory" className="lamp" onClick={onNextStory}>Next story: {nextStory.storyTitle}</button>}
       <div id="nav">
-        <button id="prevBtn" className="ghost" aria-label="Previous page" disabled={pageNo === 0} onClick={() => goTo(pageNo - 1)}>◀</button>
+        <button id="prevBtn" className="quiet arrow" aria-label="Previous page" disabled={pageNo === 0} onClick={() => goTo(pageNo - 1)}>‹</button>
         <div id="pageNum">{pageLabel(book, pageNo)}</div>
-        <button id="nextBtn" aria-label="Next page" disabled={pageNo === book.pages.length - 1} onClick={() => goTo(pageNo + 1)}>▶</button>
+        <button id="nextBtn" className="lamp arrow" aria-label="Next page" disabled={pageNo === book.pages.length - 1} onClick={() => goTo(pageNo + 1)}>›</button>
       </div>
       <div id="strip" ref={stripRef}>
         {book.pages.map((p, i) => (

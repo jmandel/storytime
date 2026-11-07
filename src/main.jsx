@@ -1,15 +1,16 @@
 import {createRoot} from 'react-dom/client'
 import {App} from './App.jsx'
-import {MY_CALL, SETUP, ingestHomeLink, read} from './lib/store.js'
+import {ingestFamilyLink} from './lib/family.js'
 import {installBackGuards} from './lib/guard.js'
 import './styles.css'
 
-ingestHomeLink()
-// Also when a home link is opened in a tab that already shows the app (only the hash changes, no reload). This
-// listener is added before React's, so the setup is saved before the screen re-renders.
-addEventListener('hashchange', ingestHomeLink)
-// The reader's tablet opened at the bare address (a home-screen icon or bookmark without the link): its call.
-if (!location.hash && !read(SETUP) && read(MY_CALL)) history.replaceState(null, '', `#${read(MY_CALL)}`)
+// Cameras only work on https: the site also answers on plain http without redirecting, so move over (the link after
+// # comes along).
+if (location.protocol === 'http:' && !/^(localhost|127\.|\[::1\])/.test(location.hostname)) location.replace(location.href.replace(/^http:/, 'https:'))
+ingestFamilyLink()
+// Also when a family link is opened in a tab that already shows the app (only the hash changes, no reload). This
+// listener is added before React's, so the family is saved before the screen re-renders.
+addEventListener('hashchange', ingestFamilyLink)
 installBackGuards()
 watchForUpdates()
 // A home-screen app can stay open for days without reloading. When it comes back to the front (and every half hour),

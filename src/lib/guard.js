@@ -8,14 +8,8 @@ import {useEffect} from 'react'
 //   further back (out of the app).
 // - Call: Back changes the hash away from the call link; ask "Leave the call?" and, if not, go forward again. This
 //   listener is installed before React's, so a cancelled Back never re-renders. The Leave button sets `leaving`.
-const isCall = url => {
-  const p = new URLSearchParams(new URL(url).hash.slice(1))
-  return !!(p.get('r') && p.get('k'))
-}
-const isHome = () => {
-  const p = new URLSearchParams(location.hash.slice(1))
-  return !(p.get('r') && p.get('k')) && !p.get('view')
-}
+const isCall = url => new URLSearchParams(new URL(url).hash.slice(1)).has('call')
+const isHome = () => !location.hash || location.hash === '#'
 
 let leaving = false, restoring = false, exiting = false, own = false
 // Changing the hash from code also fires popstate; the app marks its own navigations so they aren't taken for Back.

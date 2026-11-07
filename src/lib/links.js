@@ -1,13 +1,9 @@
-// Link format (everything lives after '#', so it never reaches the web server):
-//   #r=<room>&k=<secret>&lk=<library key>&reader=<name>&child=<name>   a reader's call: one link for both sides,
-//       the same every time. Each device works out its side (store.js callSide): the parent's device has the call
-//       saved, so it is the child's phone; any other device is the reader.
-//   optional: &as=reader|child (force a side: preview.html, tests, "Open <child>'s side")
-//             &b=<id>,<id>,... (on the phone's own address only: tonight's stack, sent to the tablet over the call)
-//             &lib=<url of the encrypted books folder> (default: books/ next to this page)
-//             &relay=wss://a,wss://b (our own signaling relays instead of the defaults)
-//             &turn=<base64url JSON iceServers> (TURN servers for networks that block direct calls)
-//             &preview=1 (join straight away with incoming audio muted; used by preview.html)
+// Addresses (everything lives after '#', so it never reaches the web server):
+//   #f=<family key>&n=<family name>   the family link (src/lib/family.js); saved on the device, then cleared
+//        optional: &lib=<url of a books/ folder>, &relay=wss://a,wss://b, &turn=<base64url JSON iceServers>
+//   (empty)                           home (or the welcome screen on a device without a family)
+//   #call                             the family call (&preview=1: join straight away, incoming audio muted)
+//   #view=<book id>                   one book on its own, with a PDF download
 import {useEffect, useState} from 'react'
 import {markOwnNavigation} from './guard.js'
 

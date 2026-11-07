@@ -22,16 +22,17 @@
   <figure><figcaption>Child's phone on the stand</figcaption><div class="box"><iframe id="phone" allow="camera; microphone; autoplay; clipboard-write"></iframe></div></figure>
 </main>
 <script>
-  // Both views join a fresh room; this page's own #lk=... (and any other settings) are passed through.
+  // Two people in one family call: this page's own #f=<family key> (to see the family's books), or a fresh family
+  // with the public books only. #a=<name>&b=<name> names them (default Gramma and Cleo).
   const p = new URLSearchParams(location.hash.slice(1))
-  const rand = n => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(n)))).replace(/[+/=]/g, '')
-  p.set('r', rand(12)); p.set('k', rand(18)); p.set('preview', '1')
-  const src = role => { const q = new URLSearchParams(p); q.set('as', role); return `index.html#${q}` }
-  const name = (k, d) => p.get(k) ? `${p.get(k)}'s` : d
-  document.querySelectorAll('figcaption')[0].textContent = `${name('reader', "Reader's")} tablet`
-  document.querySelectorAll('figcaption')[1].textContent = `${name('child', "Child's")} phone on the stand`
-  document.getElementById('tablet').src = src('reader')
-  document.getElementById('phone').src = src('child')
+  const rand = n => btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(n)))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
+  const f = p.get('f') || rand(32)
+  const people = [p.get('a') || 'Gramma', p.get('b') || 'Cleo']
+  const src = name => `index.html#${new URLSearchParams({call: '', preview: '1', f, name})}`
+  document.querySelectorAll('figcaption')[0].textContent = `${people[0]}'s tablet`
+  document.querySelectorAll('figcaption')[1].textContent = `${people[1]}'s phone`
+  document.getElementById('tablet').src = src(people[0])
+  document.getElementById('phone').src = src(people[1])
   // Scale the frames to fit: side by side on wide screens, stacked (each filling the width) on narrow ones.
   const fit = () => {
     const W = innerWidth - 32, frames = [...document.querySelectorAll('.box iframe')]

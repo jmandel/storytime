@@ -1,8 +1,11 @@
 // Books: public ones (books/public/index.json + <id>.json, readable by anyone) and private ones, encrypted files
-// (12-byte IV + AES-GCM ciphertext of JSON) opened with the library key from the link (books/index.bin + <hash>.bin).
+// (12-byte IV + AES-GCM ciphertext of JSON) opened with the library key derived from the family key
+// (books/index.bin + <hash>.bin). The books folder is next to the page unless the family link names another (lib=).
 // The indexes list the books with small covers; a whole book is only fetched when it is opened.
 import {useEffect, useState} from 'react'
 import {fromB64url} from './links.js'
+import {libraryKeyOf} from './family.js'
+import {getLocalBook, useLocalBooks} from './localbooks.js'
 
 const keys = new Map()
 const indexes = new Map()
@@ -25,12 +28,20 @@ async function loadPublic(lib, file) {
 }
 
 // A whole book from its index entry.
-export const openBook = (entry, lk, lib) => entry.public ? loadPublic(lib, entry.file) : openSealed(lk, lib, entry.file)
+export async function openBook(entry, lk, lib) {
+  if (entry.local) {
+    const b = await getLocalBook(entry.f, entry.id)
+    if (!b) throw new Error('it is no longer on this device')
+    return b
+  }
+  return entry.public ? loadPublic(lib, entry.file) : openSealed(lk, lib, entry.file)
+}
 
 async function loadIndex(lk, lib) {
   const [pub, priv] = await Promise.all([
     loadPublic(lib, 'index.json').then(r => r.books, () => []),
-    lk ? openSealed(lk, lib, 'index.bin').then(r => r.books) : [],
+    // A family started in the browser (or another site's) has no books here: this library doesn't open with its key.
+    lk ? openSealed(lk, lib, 'index.bin').then(r => r.books, e => { if (e.name === 'OperationError') return []; throw e }) : [],
   ])
   const seen = new Set(pub.map(b => b.id))
   return [...pub, ...priv.filter(b => !seen.has(b.id))]
@@ -38,18 +49,36 @@ async function loadIndex(lk, lib) {
 
 // The book list (public books plus, with a library key, the private ones): {books, error}; books is null while
 // loading.
-export function useLibrary(lk, lib) {
+export function useLibrary(lk, lib, enabled = true) {
   const id = `${lk || ''}|${lib || ''}`
   const [state, setState] = useState({id, books: null, error: null})
   useEffect(() => {
+    if (!enabled) return
     let live = true
     if (!indexes.has(id)) indexes.set(id, loadIndex(lk, lib))
     indexes.get(id).then(
       books => live && setState({id, books, error: null}),
       e => { indexes.delete(id); live && setState({id, books: [], error: e.message}) })
     return () => { live = false }
-  }, [id])
-  return state.id === id ? state : {books: null, error: null}
+  }, [id, enabled])
+  return state.id === id && enabled ? state : {books: null, error: null}
+}
+
+// The family's books: {books, error, lk}: hosted ones and the ones added in the browser (marked local). Without a
+// family, the public books only.
+export function useFamilyBooks(family) {
+  const [lk, setLk] = useState(null)
+  useEffect(() => {
+    let live = true
+    setLk(null)
+    if (family?.f) libraryKeyOf(family.f).then(k => live && setLk(k))
+    return () => { live = false }
+  }, [family?.f])
+  const ready = !family?.f || !!lk
+  const hosted = useLibrary(lk, family?.lib, ready)
+  const local = useLocalBooks(family?.f)
+  const books = hosted.books && [...local.map(b => ({...b, f: family.f})), ...hosted.books.filter(b => !local.some(l => l.id === b.id))]
+  return {...hosted, books, lk, lib: family?.lib}
 }
 
 export const pageLabel = (book, i) => book.pages[i]?.label || `Page ${i}`

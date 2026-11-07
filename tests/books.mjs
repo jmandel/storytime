@@ -1,29 +1,33 @@
-// Tonight's stack, book switching and page turns from both sides. Needs at least two books in the library.
-// Optional env: STORYTIME_LIB (e.g. books-test/) to use another library folder.
-import {browser, page, check, URL_, LK} from './lib.mjs'
-const lib = process.env.STORYTIME_LIB ? `&lib=${process.env.STORYTIME_LIB}` : ''
-const child = await page(390, 844, true), reader = await page(1180, 820)
-await child.goto(`${URL_}#lk=${LK}${lib}&reader=Grandma&child=Cleo`)
-await child.waitForSelector('#startShelf button')
-// Plain books only (a collection card opens its contents instead of being picked; tests/collections.mjs covers those).
-const titles = await child.locator('#startShelf .mini-shelf').last().locator('button:not(:has(.storyCount))').allTextContents()
-check(titles.length >= 2, `start screen lists ${titles.length} plain books`)
-const [first, second] = titles
-await child.locator('#startShelf button', {hasText: second}).last().click()
-await child.locator('#startShelf button', {hasText: first}).last().click()
-await child.click('#startBtn')
-const link = await child.textContent('#linkbox')
-check(!new URLSearchParams(link.split('#')[1]).has('b'), "tonight's books aren't in the link (they go over the call)")
-await reader.goto(link); await reader.click('#joinBtn')
-await reader.waitForFunction(t => document.getElementById('bookTitle')?.textContent === t, second, {timeout: 45000}).catch(() => {})
-check((await reader.textContent('#bookTitle')) === second, `reader opens the first book of the stack (${second})`)
-const badge = () => child.textContent('#pageBadge')
-await child.waitForFunction(() => document.getElementById('pageBadge'), null, {timeout: 45000}).catch(() => {})
-check((await badge()).includes(second), `phone shows the reader's book: ${await badge()}`)
-await child.click('#childNext'); await reader.waitForTimeout(1200)
-check((await reader.textContent('#pageNum')) !== 'Cover' || (await badge()).includes('Page 1'), `phone turns the page: ${await reader.textContent('#pageNum')}`)
-await child.click('#bookBtn'); await child.locator('#pickerShelf button', {hasText: first}).last().click(); await reader.waitForTimeout(2500)
-check((await reader.textContent('#bookTitle')) === first, `phone switches the book to ${first}`)
-await reader.click('#nextBtn'); await reader.waitForTimeout(1200)
-check((await badge()).includes(first), `reader's page turn reaches the phone: ${await badge()}`)
+// The shared book: anyone opens a book or turns a page and every screen follows; someone joining gets what is open.
+// The tablet shows the page panel, the phone the slim bar (and can show the words too).
+import {browser, check, member, joinCall, waitSeeing, testRoom} from './lib.mjs'
+const room = testRoom()
+const gramma = await member('Gramma', {room}), cleo = await member('Cleo', {room, width: 390, height: 844, mobile: true})
+await joinCall(gramma); await joinCall(cleo)
+check(await waitSeeing(gramma, 1) && await waitSeeing(cleo, 1), 'connected')
+await gramma.waitForSelector('#shelf .cover')
+const title = (await gramma.locator('#shelf .cover:not(:has(.sub)) .name').allTextContents())[0]
+await gramma.locator('#shelf .cover', {hasText: title}).first().click()
+await gramma.waitForSelector('#strip img', {timeout: 20000})
+check(await gramma.textContent('#bookTitle') === title, `the tablet opens ${title}`)
+const bar = () => cleo.textContent('#bookBar').catch(() => '')
+check(await cleo.waitForFunction(t => document.getElementById('bookBar')?.textContent.includes(t), title, {timeout: 15000}).then(() => true, () => false),
+  `the phone follows: ${await bar()}`)
+await cleo.click('#barNext')
+check(await gramma.waitForFunction(() => document.getElementById('pageNum')?.textContent !== 'Cover', null, {timeout: 10000}).then(() => true, () => false),
+  `the phone turns the page: ${await gramma.textContent('#pageNum')}`)
+await gramma.click('#nextBtn')
+check(await cleo.waitForFunction(() => /Page 2/.test(document.getElementById('bookBar')?.textContent), null, {timeout: 10000}).then(() => true, () => false),
+  `the tablet turns the page: ${await bar()}`)
+await cleo.click('#pageBadge'); await cleo.waitForSelector('#pickerShelf')
+const other = (await cleo.locator('#pickerShelf .cover:not(:has(.sub)) .name').allTextContents()).find(t => t !== title)
+await cleo.locator('#pickerShelf .cover', {hasText: other}).first().click()
+check(await gramma.waitForFunction(t => document.getElementById('bookTitle')?.textContent === t, other, {timeout: 15000}).then(() => true, () => false),
+  `the phone switches the book to ${other}`)
+await cleo.click('#bookToggle'); await cleo.waitForSelector('#book #pageText', {timeout: 15000}).catch(() => {})
+check(await cleo.isVisible('#book #pageText'), 'the phone can show the words too')
+
+const dad = await member('Dad', {room, width: 1440, height: 900}); await joinCall(dad)
+check(await dad.waitForFunction(t => document.getElementById('bookTitle')?.textContent === t, other, {timeout: 45000}).then(() => true, () => false),
+  'someone joining opens the book that is open')
 await browser.close()
