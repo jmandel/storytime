@@ -48,7 +48,7 @@ function StartFamily({onCancel}) {
   }
   return (
     <form id="startFamily" className="card" onSubmit={submit}>
-      <label>Family name <input id="familyName" autoFocus placeholder="The Mandels" value={name} onChange={e => setName(e.target.value)} /></label>
+      <label>Family name <input id="familyName" autoFocus value={name} onChange={e => setName(e.target.value)} /></label>
       <label>Your name <input id="myName" placeholder="Dad" value={mine} onChange={e => setMine(e.target.value)} /></label>
       <div className="row">
         <button id="createFamilyBtn" className="lamp" disabled={!name.trim() || !mine.trim()}>Start the family</button>

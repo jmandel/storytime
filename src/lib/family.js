@@ -44,7 +44,9 @@ export function ingestFamilyLink() {
     history.replaceState(null, '', location.pathname)
     return
   }
-  const family = {f, name: params.get('n') || '', people: have?.f === f ? have.people || [] : []}
+  const same = have?.f === f
+  // A link without a name keeps the name this device already has for the family.
+  const family = {f, name: params.get('n') || (same ? have.name || '' : ''), people: same ? have.people || [] : []}
   for (const k of LINK_KEYS) if (params.get(k)) family[k] = params.get(k)
   write(FAMILY, family)
   if (params.get('name')) setMyName(params.get('name'))
