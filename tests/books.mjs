@@ -19,6 +19,14 @@ check(await gramma.waitForFunction(() => document.getElementById('pageNum')?.tex
 await gramma.click('#nextBtn')
 check(await cleo.waitForFunction(() => /Page 2/.test(document.getElementById('bookBar')?.textContent), null, {timeout: 10000}).then(() => true, () => false),
   `the tablet turns the page: ${await bar()}`)
+// The tablet hides the book; it stays in step and shows the page when it opens it again.
+await gramma.click('#bookToggle'); await gramma.waitForSelector('#bookBar')
+await cleo.click('#barNext')
+check(await gramma.waitForFunction(() => /Page 3/.test(document.getElementById('bookBar')?.textContent), null, {timeout: 10000}).then(() => true, () => false),
+  `with the book hidden, the tablet still follows: ${await gramma.textContent('#bookBar').catch(() => '')}`)
+await gramma.click('#bookToggle'); await gramma.waitForSelector('#pageNum')
+check(await gramma.waitForFunction(() => document.getElementById('pageNum')?.textContent === 'Page 3', null, {timeout: 10000}).then(() => true, () => false),
+  `showing it again opens the current page: ${await gramma.textContent('#pageNum')}`)
 await cleo.click('#pageBadge'); await cleo.waitForSelector('#pickerShelf')
 const other = (await cleo.locator('#pickerShelf .cover:not(:has(.sub)) .name').allTextContents()).find(t => t !== title)
 await cleo.locator('#pickerShelf .cover', {hasText: other}).first().click()

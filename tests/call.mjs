@@ -13,6 +13,13 @@ check(await waitSeeing(dad, 2) && await waitSeeing(gramma, 2) && await waitSeein
 const names = await cleo.locator('#grid figcaption').allTextContents()
 check(names.some(n => n.startsWith('Gramma')) && names.some(n => n.startsWith('Dad')), `names under the videos: ${names}`)
 
+await gramma.click('#cameraBtn')
+check(await cleo.waitForFunction(() => [...document.querySelectorAll('#grid .tile.camOff .who')].some(w => w.textContent === 'Gramma'), null, {timeout: 15000}).then(() => true, () => false),
+  'turning the camera off shows the name instead (and the call stays up)')
+await gramma.click('#cameraBtn')
+check(await cleo.waitForFunction(() => !document.querySelector('#grid .tile.camOff'), null, {timeout: 15000}).then(() => true, () => false)
+  && await waitSeeing(cleo, 2), 'turning it back on shows the video again')
+
 const stranger = await member('Stranger', {f: fresh()})
 await joinCall(stranger); await stranger.waitForTimeout(8000)
 check(await stranger.locator('#grid video.remote').count() === 0 && await gramma.locator('#grid .tile').count() === 2, "another family's call is separate")

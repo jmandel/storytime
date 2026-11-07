@@ -123,7 +123,7 @@ details summary { cursor: pointer; color: var(--mist); }
 /* The call: the video stage, and beside it (or below, on a tall phone) the book's page. */
 #call { height: 100%; display: flex; background: #12241f; }
 #stage { position: relative; flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 12px; gap: 12px; }
-#grid { flex: 1; min-height: 0; display: grid; gap: 12px; grid-template-columns: 1fr; grid-auto-rows: 1fr; }
+#grid { flex: 1; min-height: 0; overflow: hidden; display: grid; gap: 12px; grid-template-columns: 1fr; grid-auto-rows: 1fr; }
 #grid[data-count="2"] { grid-template-columns: repeat(2, 1fr); }
 #grid[data-count="3"], #grid[data-count="4"] { grid-template-columns: repeat(2, 1fr); }
 #grid:not([data-count="1"]):not([data-count="2"]):not([data-count="3"]):not([data-count="4"]) { grid-template-columns: repeat(3, 1fr); }
@@ -131,14 +131,18 @@ details summary { cursor: pointer; color: var(--mist); }
 #stage { container-type: size; }
 @container (aspect-ratio < 1) { #grid[data-count="2"] { grid-template-columns: 1fr; } }
 .tile { position: relative; margin: 0; border-radius: 20px; overflow: hidden; background: #0c1915; min-height: 0; }
-.tile video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.tile video { width: 100%; height: 100%; object-fit: contain; display: block; }  /* the whole picture: a child and the book they hold */
+/* Camera off: the name in place of the picture. */
+.offCard { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  background: var(--wall-2); color: var(--mist); text-align: center; padding: 8px; }
+.offCard .who { font-family: var(--serif); font-size: clamp(1.4rem, 5vw, 2.4rem); color: var(--chalk); }
+.tile.camOff figcaption { display: none; }
+.tile.self .offCard { font-size: .8rem; padding: 0; }
 .tile figcaption { position: absolute; left: 12px; bottom: 12px; padding: 4px 14px; border-radius: 999px;
   background: rgba(14, 30, 25, .72); font-family: var(--serif); font-size: 1.05rem; }
 .tile figcaption .state { font-family: var(--sans); color: var(--mist); font-size: .9rem; }
-.tile.self { position: absolute; top: 24px; right: 24px; width: clamp(96px, 20%, 220px); aspect-ratio: 3 / 4;
-  box-shadow: 0 0 0 3px var(--wall); z-index: 2; }
-.tile.self video { transform: scaleX(-1); }
-.tile.self figcaption { left: 8px; bottom: 8px; font-size: .85rem; padding: 2px 10px; }
+.tile.self { flex: none; height: 52px; aspect-ratio: 3 / 4; border-radius: 12px; align-self: center; }
+.tile.self video { transform: scaleX(-1); object-fit: cover; }
 #waiting { grid-column: 1 / -1; align-self: center; justify-self: center; display: flex; flex-direction: column; gap: 14px;
   align-items: center; text-align: center; padding: 24px; max-width: 30em; }
 #waiting h2 { font-size: clamp(1.6rem, 4vw, 2.4rem); }
@@ -146,9 +150,15 @@ details summary { cursor: pointer; color: var(--mist); }
 #status { position: absolute; top: 24px; left: 24px; z-index: 3; padding: 6px 14px; border-radius: 999px; background: rgba(14, 30, 25, .8); }
 #tapToPlay { position: absolute; z-index: 4; left: 50%; top: 40%; transform: translate(-50%, -50%); }
 #bar { display: flex; justify-content: center; gap: 10px; padding-bottom: env(safe-area-inset-bottom); }
-#bar .quiet { flex: 0 1 140px; min-width: 0; padding: 0 10px; background: rgba(30, 59, 51, .9); white-space: nowrap; }
+#bar .quiet { flex: 0 1 140px; min-width: 0; padding: 0 6px; font-size: .95rem; line-height: 1.15; background: rgba(30, 59, 51, .9); }
 #bar .quiet.on { background: var(--chalk); color: var(--wall); }
-@media (max-width: 480px) { #bar { gap: 8px; } }
+@media (max-width: 480px) { #bar { gap: 6px; } }
+/* Little room for the video (the page open on a phone): "Waiting" shrinks to a line and a button. */
+@container (max-height: 420px) {
+  #waiting { gap: 10px; padding: 8px; }
+  #waiting h2 { font-size: 1.3rem; }
+  #waiting p { display: none; }
+}
 
 /* The slim book bar (phones): cover, title, page, arrows. */
 #bookBar { display: flex; align-items: center; gap: 8px; background: var(--paper); color: var(--ink); border-radius: 18px; padding: 8px 10px; }
@@ -161,7 +171,7 @@ details summary { cursor: pointer; color: var(--mist); }
 #bookBar .quiet { border-color: rgba(27, 38, 33, .25); }
 
 /* The page: white, the picture on top, the words large. */
-#book { width: min(46%, 640px); flex-shrink: 0; background: var(--paper); color: var(--ink); display: flex; flex-direction: column;
+#book { container-type: size; width: min(46%, 640px); flex-shrink: 0; background: var(--paper); color: var(--ink); display: flex; flex-direction: column;
   min-height: 0; }
 #book .quiet, #book .storyList button { border-color: rgba(27, 38, 33, .25); }
 #book .hint, #book .library h3 { color: #556860; }
@@ -173,7 +183,9 @@ details summary { cursor: pointer; color: var(--mist); }
 #book > .library, #book > #shelfMsg { padding: 8px 18px 18px; overflow: auto; }
 #book .cover .art { border-bottom-color: #c9b48f; }
 #reader { flex: 1; display: flex; flex-direction: column; min-height: 0; }
-#pageImg { height: 34vh; width: auto; max-width: calc(100% - 36px); margin: 8px auto 0; border-radius: 6px; object-fit: contain; }
+/* The picture gives way to the words: at most 34vh and 42% of the page panel, shrinking first. */
+#pageImg { height: auto; width: auto; max-height: min(34vh, 34cqh); max-width: calc(100% - 36px); min-height: 0; flex: 0 1 auto;
+  margin: 8px auto 0; border-radius: 6px; object-fit: contain; }
 #pageNote { text-align: center; margin: 10px 18px 0; padding: 6px 12px; border-radius: 10px; background: #fbefc8; font-weight: 700; }
 #textWrap { flex: 1; position: relative; min-height: 0; display: flex; }
 #textWrap::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2.5em; pointer-events: none; opacity: 0;
@@ -193,29 +205,22 @@ details summary { cursor: pointer; color: var(--mist); }
 /* Tall narrow screens (a phone held upright): the page goes under the video. */
 @media (max-aspect-ratio: 4/5) {
   #call.withBook { flex-direction: column; }
-  #call.withBook #book { width: auto; height: 56%; border-radius: 22px 22px 0 0; }
-  #call.withBook .tile.self { width: 68px; top: 18px; right: 18px; }
-  #call.withBook .tile.self figcaption { display: none; }
-  #pageImg { height: 22vh; }
+  #call.withBook #book { width: auto; height: 70%; border-radius: 22px 22px 0 0; }
 }
-/* Short page panels: the words matter most; the page strip goes (the arrows stay). */
-@media (max-height: 520px), (max-aspect-ratio: 4/5) and (max-height: 720px) {
-  #strip { display: none; }
-}
-@media (max-aspect-ratio: 4/5) and (max-height: 720px) {
-  #call.withBook #book { height: 64%; }
-  #pageImg { height: 15vh; margin-top: 4px; }
-  #bookHead { padding: 10px 14px 4px; }
+/* An upright tablet has room for both: more for the video than on a phone. */
+@media (max-aspect-ratio: 4/5) and (min-width: 600px) { #call.withBook #book { height: 52%; } }
+@media (max-height: 520px) { .tile.self { height: 44px; } }
+/* A short page panel: the words matter most, so the picture shrinks and the page strip goes (the arrows stay). */
+@container (max-height: 640px) { #strip { display: none; } }
+@container (max-height: 520px) {
+  #pageImg { max-height: 28cqh; margin-top: 2px; }
+  #bookHead { padding: 8px 14px 2px; }
   #pageNote { margin-top: 6px; padding: 3px 10px; font-size: .9em; }
-}
-@media (max-height: 520px) {
-  #pageImg { height: 26vh; }
-  .tile.self { width: 18%; }
 }
 
 /* The viewer: the page on its own, full screen. */
 #viewer #book { width: 100%; height: 100%; }
 #viewer.screen { height: 100%; }
-#viewer #pageImg { height: 50vh; }
+#viewer #pageImg { max-height: 50vh; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; scroll-behavior: auto !important; } }

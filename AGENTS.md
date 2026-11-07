@@ -63,16 +63,23 @@ on plain http, where cameras don't work).
 
 ## The call
 
-Everyone in the family room sees everyone else in a grid (`#grid`, one tile per person, with their name; this
-device's own video small in the corner). There are no sides. "Join the call" on home goes straight in (the tap
+Everyone in the family room sees everyone else in a grid (`#grid`, one tile per person, with their name, showing
+the whole picture: a phone on a stand sends a tall one, and cropping it loses the child or the book). This device's
+own video is a small thumbnail at the start of the button bar, never over anyone else. There are no sides. "Join the call" on home goes straight in (the tap
 allows sound); a freshly opened `#call` asks for one Join tap, so a reload never turns a camera on by itself.
-Leaving (or Back, which asks "Leave the call?") goes home.
+Leaving (or Back, which asks "Leave the call?") goes home. The bar: Mute, Camera off (the others see the name instead of
+a black picture; the hello carries `camOff`), Book (show or hide the page on this screen only), Leave.
 
 The open book is shared (`useSharedBook`): `{id, page, at, by}`; anyone can open a book or turn a page, every screen
 follows, the newest change wins, and someone joining is sent what is open. Each screen chooses how much book to show
 (`#bookToggle`): the page panel (`#book`: picture, words fitted large, arrows, page strip; the default at 820px and
 wider) or the slim bar over the video (`#bookBar`: cover, title, page, arrows; tapping the title picks another
-book). On a tall phone the panel goes under the video.
+book). Hiding the page never leaves the shared book: the bar keeps following, and showing it again opens the
+current page. On a tall phone the panel goes under the video. The words come first: `Page` fits them as large as they go; if that is
+under a comfortable size it shrinks the picture (down to a strip that still shows which page it is) before making
+the words smaller or scrolling. The page strip goes when the panel is short (container queries on `#book`). Split:
+side by side when there is width (a tablet sideways); stacked otherwise, the page taking 52% on an upright tablet
+and 70% on a phone.
 
 How screens find each other (`src/lib/call.js`): every screen says hello every 4 s (name, device id, when it joined,
 foreground or not, whose video is reaching it). Screens that stop saying hello drop out of the grid. Another tab or

@@ -51,7 +51,7 @@ function retire(lib, room) {
 //  - repair a one-way connection: if someone keeps reporting that our video isn't arriving, join again.
 const HELLO_MS = 4000
 
-// people: [{id, name, stream, live (video arriving), since}] in the order they joined, not including this screen.
+// people: [{id, name, stream, live (video arriving), camOff, since}] in the order they joined, not including this screen.
 // handlers: {onPeerJoin(id), onMessage(msg, id)}, read through a ref so they can change between renders.
 // Returns {status: {text, cls}, people, alone, send(msg, targetId?), replaced, retry()}.
 export function useCall(family, self, stream, handlers) {
@@ -74,14 +74,15 @@ export function useCall(family, self, stream, handlers) {
     window.__storytimeCall = {me, peers, state, joins}  // for tests and debugging
 
     const quiet = p => p.seen && Date.now() - p.seen > 2.5 * HELLO_MS
-    const live = p => !!p?.stream?.getVideoTracks().some(t => t.readyState === 'live' && !t.muted)
+    // Video arriving (a screen whose camera is turned off counts once its stream is here: it sends black frames).
+    const live = p => !!p?.stream && (p.camOff || p.stream.getVideoTracks().some(t => t.readyState === 'live' && !t.muted))
     // Others: everyone but a second tab of this device and screens that went quiet.
     const others = () => [...peers.entries()].filter(([, p]) => p.device !== me.device && !quiet(p))
     function show() {
       if (closed) return
       const list = others().filter(([, p]) => p.stream || p.name)
         .sort(([, a], [, b]) => (a.since ?? a.joinedAt) - (b.since ?? b.joinedAt))
-        .map(([id, p]) => ({id, name: p.name || '', stream: p.stream || null, live: live(p), since: p.since}))
+        .map(([id, p]) => ({id, name: p.name || '', stream: p.stream || null, live: live(p), camOff: !!p.camOff, since: p.since}))
       setPeople(list)
       const recent = joins.filter(t => Date.now() - t < 180000).length
       if (list.some(p => p.live)) return setStatus({text: '', cls: 'ok'})
@@ -106,7 +107,7 @@ export function useCall(family, self, stream, handlers) {
     }
     function onHello(msg, id) {
       const p = peer(id)
-      Object.assign(p, {name: msg.name, device: msg.device, since: msg.since, inst: msg.inst, hidden: msg.hidden, seen: Date.now()})
+      Object.assign(p, {name: msg.name, device: msg.device, since: msg.since, inst: msg.inst, hidden: msg.hidden, camOff: !!msg.camOff, seen: Date.now()})
       handlersRef.current.onPerson?.(msg.name)
       if (p.device === me.device) {
         // Another tab of this device: the newest one in the foreground keeps the call.
@@ -206,6 +207,8 @@ export function useCall(family, self, stream, handlers) {
       connect()
     }
     state.retry = () => { lastJoin = 0; rejoin() }
+    // Camera on or off: tell everyone straight away (they show the name instead of a black picture).
+    state.setCamOff = off => { me.camOff = off; hello() }
 
     // Back from the background (e.g. after sending the link from Messages): relay sockets may have died while the
     // page was frozen, so unless everyone's video is arriving, join again now rather than waiting.
@@ -250,6 +253,7 @@ export function useCall(family, self, stream, handlers) {
     status, people, replaced, alone: !people.some(p => p.live),
     send: (msg, target) => api.current.send(msg, target),
     retry: () => api.current.retry(),
+    setCamOff: off => api.current.setCamOff?.(off),
   }
 }
 

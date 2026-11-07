@@ -117,6 +117,14 @@ function Call({family, self, stream, preview, onLeave}) {
   const [blocked, setBlocked] = useState(false)
   useWakeLock()
 
+  const [camOff, setCamOff] = useState(false)
+  const toggleCamera = () => {
+    const track = stream.getVideoTracks()[0]
+    if (!track) return
+    track.enabled = !track.enabled
+    setCamOff(!track.enabled)
+    call.setCamOff(!track.enabled)
+  }
   const toggleMute = () => {
     const track = stream.getAudioTracks()[0]
     if (!track) return
@@ -140,8 +148,9 @@ function Call({family, self, stream, preview, onLeave}) {
       <div id="stage">
         <div id="grid" data-count={people.length || 1}>
           {people.map(p => (
-            <figure key={p.id} className={`tile${p.live ? ' live' : ''}`}>
+            <figure key={p.id} className={`tile${p.live ? ' live' : ''}${p.camOff ? ' camOff' : ''}`}>
               <Video className="remote" stream={p.stream} muted={preview} onBlocked={() => setBlocked(true)} />
+              {p.camOff && <div className="offCard"><span className="who">{p.name}</span><span>Camera off</span></div>}
               <figcaption>{p.name || 'Joining…'}{!p.live && <span className="state"> · connecting</span>}</figcaption>
             </figure>
           ))}
@@ -149,14 +158,16 @@ function Call({family, self, stream, preview, onLeave}) {
         </div>
         {blocked && <button id="tapToPlay" className="lamp big" onClick={() => { document.querySelectorAll('video.remote').forEach(v => v.play().catch(() => {})); setBlocked(false) }}>
           Tap to hear everyone</button>}
-        <figure id="selfTile" className="tile self">
-          <Video id="self" stream={stream} muted />
-          <figcaption>{self.name}{muted ? ' · muted' : ''}</figcaption>
-        </figure>
         {call.status.cls === 'warn' && <div id="status" className="warn">{call.status.text}</div>}
         {!panel && shared && <BookBar shared={shared} books={books} onTurn={p => setShared(shared.id, p)} onPick={() => setPicking(true)} />}
         <nav id="bar">
-          <button id="muteBtn" className={`quiet${muted ? ' on' : ''}`} onClick={toggleMute}>{muted ? 'Unmute' : 'Mute'}</button>
+          {/* This screen's own picture: small, beside the buttons, never over anyone else. */}
+          <figure id="selfTile" className={`tile self${camOff ? ' camOff' : ''}`} title={self.name}>
+            {camOff && <div className="offCard"><span>Off</span></div>}
+            <Video id="self" stream={stream} muted />
+          </figure>
+          <button id="muteBtn" className={`quiet${muted ? ' on' : ''}`} aria-pressed={muted} onClick={toggleMute}>{muted ? 'Unmute' : 'Mute'}</button>
+          <button id="cameraBtn" className={`quiet${camOff ? ' on' : ''}`} aria-pressed={camOff} onClick={toggleCamera}>{camOff ? 'Camera on' : 'Camera off'}</button>
           <button id="bookToggle" className={`quiet${panel ? ' on' : ''}`} aria-pressed={panel} onClick={() => setPanel(v => !v)}>Book</button>
           <button id="leaveBtn" className="quiet" onClick={leave}>Leave</button>
         </nav>
@@ -256,16 +267,17 @@ function BookPanel({shared, books, booksError, lk, lib, onOpen, onTurn}) {
   )
 }
 
-const MIN_TEXT = 22
+const MIN_TEXT = 22, COMFY_TEXT = 28, MIN_PICTURE = 56
 export function Page({book, pageNo, goTo, nextStory, onNextStory}) {
   const page = book.pages[pageNo]
-  const readerRef = useRef(), textRef = useRef(), wrapRef = useRef(), stripRef = useRef()
+  const readerRef = useRef(), textRef = useRef(), wrapRef = useRef(), stripRef = useRef(), imgRef = useRef()
 
-  // Largest type at which the whole page's words fit their box: up to about a twelfth of the box's width (so ~30px
-  // on a phone, up to 64px on a tablet), never below MIN_TEXT. The picture always shows, at the same height on
-  // every page; words that don't fit at MIN_TEXT scroll, with a "more" cue.
+  // The words come first. Largest type at which the whole page's words fit their box: up to about a twelfth of the
+  // box's width (so ~30px on a phone, up to 64px on a tablet). If that is under a comfortable size, the picture gives
+  // up its room, down to a strip (MIN_PICTURE) that still shows which page it is; only then do the words go down to
+  // MIN_TEXT and, if they still don't fit, scroll with a "more" cue.
   const fit = () => {
-    const el = textRef.current, box = readerRef.current
+    const el = textRef.current, box = readerRef.current, img = imgRef.current
     if (!el || !box) return
     const fits = () => el.scrollHeight <= el.clientHeight && el.scrollWidth <= el.clientWidth
     const size = () => {
@@ -277,8 +289,16 @@ export function Page({book, pageNo, goTo, nextStory, onNextStory}) {
         else hi = mid
       }
       el.style.fontSize = `${lo}px`
+      return lo
     }
-    size()
+    if (img) img.style.maxHeight = ''
+    let got = size()
+    const want = Math.min(COMFY_TEXT, Math.round(el.clientWidth / 12))
+    for (let h = img?.getBoundingClientRect().height || 0; img && got < want && h > MIN_PICTURE;) {
+      h = Math.max(MIN_PICTURE, Math.floor(h * 0.8))
+      img.style.maxHeight = `${h}px`
+      got = size()
+    }
     moreCue()
   }
   const moreCue = () => {
@@ -296,7 +316,7 @@ export function Page({book, pageNo, goTo, nextStory, onNextStory}) {
 
   return (
     <div id="reader" ref={readerRef}>
-      <img id="pageImg" src={page.img} alt="" onLoad={fit} />
+      <img id="pageImg" ref={imgRef} src={page.img} alt="" onLoad={fit} />
       {page.note && <div id="pageNote">{page.note}</div>}
       <div id="textWrap" ref={wrapRef}>
         <div id="pageText" ref={textRef} onScroll={moreCue}><SpeakerText text={page.text} voices={book.voices} /></div>
